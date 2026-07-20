@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -15,8 +14,8 @@ import (
 type User struct {
 	gorm.Model
 
-	Username     string         `json:"username" gorm:"uniqueIndex;not null;type:varchar(255)"`
-	Role         types.UserRole `json:"role" gorm:"not null"`
+	Username string         `json:"username" gorm:"uniqueIndex;not null;type:varchar(255)"`
+	Role     types.UserRole `json:"role" gorm:"not null"`
 
 	// PasswordHash stores the bcrypt hash of the user's password and is the
 	// primary credential for dashboard login (exchanged for a short-lived JWT).
@@ -30,7 +29,7 @@ type User struct {
 	// AllowedServers restricts which MCP servers this user's clients may access.
 	// Empty/nil or ["*"] means all servers (default). Set by admins to implement
 	// "these MCPs are only available to these people".
-	AllowedServers datatypes.JSON `json:"allowed_servers,omitempty" gorm:"type:jsonb"`
+	AllowedServers JSON `json:"allowed_servers,omitempty"`
 }
 
 // CheckAllowedServer reports whether the user is permitted to access the given

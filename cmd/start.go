@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -38,17 +37,8 @@ const (
 	BindPortDefault = "8080"
 
 	DBUrlEnvVar            = "DATABASE_URL"
-	SQLiteDBPathEnvVar     = "SQLITE_DB_PATH"
 	ServerModeEnvVar       = "SERVER_MODE"
 	TelemetryEnabledEnvVar = "OTEL_ENABLED"
-)
-
-const (
-	PostgresHostEnvVar     = "POSTGRES_HOST"
-	PostgresPortEnvVar     = "POSTGRES_PORT"
-	PostgresUserEnvVar     = "POSTGRES_USER"
-	PostgresPasswordEnvVar = "POSTGRES_PASSWORD"
-	PostgresDBEnvVar       = "POSTGRES_DB"
 )
 
 const (
@@ -76,7 +66,6 @@ const (
 
 var (
 	startServerCmdBindPort          string
-	startServerCmdSQLiteDBPath      string
 	startServerCmdEnterpriseEnabled bool
 	startServerCmdProdEnabled       bool
 )
@@ -87,14 +76,8 @@ var startServerCmd = &cobra.Command{
 	Long: "Starts the MCPJungle HTTP Registry and the MCP Gateway\n\n" +
 		"The server is started in development mode by default, which is ideal for running mcpjungle locally.\n" +
 		"Teams & Enterprises should run mcpjungle in enterprise mode.\n\n" +
-		"If no PostgreSQL configuration is provided, this command uses a SQLite database file at ./mcpjungle.db by default.\n" +
-		"You can optionally override that SQLite file path with the --sqlite-db-path flag or the SQLITE_DB_PATH environment variable.\n" +
-		"You can also supply a custom DSN in the DATABASE_URL environment variable.\n" +
-		"eg: export DATABASE_URL='postgres://user:password@localhost:5432/mcpjungle'\n" +
-		"For Postgres, you can also set individual connection details using the following environment variables:\n" +
-		"POSTGRES_HOST, POSTGRES_PORT (default 5432), POSTGRES_USER (default postgres), POSTGRES_PASSWORD, POSTGRES_DB (default postgres)\n\n" +
-			"For MySQL, set DATABASE_URL='mysql://user:password@localhost:3306/mcpjungle'\n" +
-			"or use MYSQL_HOST, MYSQL_PORT (default 3306), MYSQL_USER (default root), MYSQL_PASSWORD, MYSQL_DB (default mcpjungle).\n\n" +
+		"MySQL 8.0 is required. Set DATABASE_URL='mysql://user:password@localhost:3306/mcpjungle'\n" +
+		"or use MYSQL_HOST, MYSQL_PORT (default 3306), MYSQL_USER (default root), MYSQL_PASSWORD, MYSQL_DB (default mcpjungle).\n\n" +
 		"You can also configure the amount of time (in seconds) mcpjungle will wait for a new MCP server's initialization before aborting it.\n" +
 		"Set the MCP_SERVER_INIT_REQ_TIMEOUT_SEC environment variable to an integer (default is 30).\n" +
 		"This is useful when you register a MCP server (usually stdio, like filesystem) that may take some time to start up.\n\n" +
@@ -114,15 +97,6 @@ func init() {
 		"port",
 		"",
 		fmt.Sprintf("port to bind the HTTP server to (overrides env var %s)", BindPortEnvVar),
-	)
-	startServerCmd.Flags().StringVar(
-		&startServerCmdSQLiteDBPath,
-		"sqlite-db-path",
-		"",
-		fmt.Sprintf(
-			"path to a custom SQLite database file to use, if not using postgres; defaults to ./mcpjungle.db (overrides env var %s)",
-			SQLiteDBPathEnvVar,
-		),
 	)
 	startServerCmd.Flags().BoolVar(
 		&startServerCmdEnterpriseEnabled,
@@ -249,15 +223,6 @@ func getBindPort() string {
 	return port
 }
 
-// getSQLiteDBPathOverride returns the configured SQLite DB path override.
-// precedence: command line flag > environment variable > unset (empty string)
-func getSQLiteDBPathOverride() string {
-	if startServerCmdSQLiteDBPath != "" {
-		return strings.TrimSpace(startServerCmdSQLiteDBPath)
-	}
-	return strings.TrimSpace(os.Getenv(SQLiteDBPathEnvVar))
-}
-
 // getEnvOrFile returns the value of the given environment variable.
 // If the environment variable is not set, it checks for a corresponding
 // _FILE environment variable and reads the value from the file if it exists.
@@ -282,63 +247,20 @@ func getEnvOrFile(envVar string) (string, error) {
 	return "", nil
 }
 
-// getPostgresDSN constructs a Postgres DSN from individual Postgres-specific environment variables & files.
-// It is used to provide an alternative way to specify Postgres connection details
-// in case the user doesn't want to use a full DATABASE_URL.
-// If POSTGRES_HOST is not set, this function assumes that Postgres-specific env vars are not being used
-// and returns ok=false.
-// Other Postgres env vars are optional and have sensible defaults.
-func getPostgresDSN() (string, bool, error) {
-	host := os.Getenv(PostgresHostEnvVar)
-	if host == "" {
-		return "", false, nil
+// getMysqlDSN resolves the only supported database configuration. DATABASE_URL
+// takes precedence over individual MYSQL_* values.
+func getMysqlDSN() (string, error) {
+	if raw := strings.TrimSpace(os.Getenv(DBUrlEnvVar)); raw != "" {
+		dsn, err := db.NormalizeMySQLDSN(raw)
+		if err != nil {
+			return "", fmt.Errorf("invalid %s: %w", DBUrlEnvVar, err)
+		}
+		return dsn, nil
 	}
-	port := os.Getenv(PostgresPortEnvVar)
-	if port == "" {
-		port = "5432"
-	}
-	dbName, err := getEnvOrFile(PostgresDBEnvVar)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres DB name: %w", err)
-	}
-	if dbName == "" {
-		dbName = "postgres"
-	}
-	pgUser, err := getEnvOrFile(PostgresUserEnvVar)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres user: %w", err)
-	}
-	if pgUser == "" {
-		pgUser = "postgres"
-	}
-	password, err := getEnvOrFile(PostgresPasswordEnvVar)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres password: %w", err)
-	}
-	// password can be empty, so no default value
 
-	// todo: support sslmode param in the dsn constructed here
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
-		url.QueryEscape(pgUser),
-		url.QueryEscape(password),
-		host,
-		port,
-		url.QueryEscape(dbName),
-	)
-
-	return dsn, true, nil
-}
-
-// getMysqlDSN constructs a MySQL DSN from individual MySQL-specific environment variables & files.
-// It provides an alternative to DATABASE_URL for specifying MySQL connection details.
-// If MYSQL_HOST is not set, this function assumes that MySQL-specific env vars are not being used
-// and returns ok=false.
-// Other MySQL env vars are optional and have sensible defaults.
-func getMysqlDSN() (string, bool, error) {
 	host := os.Getenv(MysqlHostEnvVar)
 	if host == "" {
-		return "", false, nil
+		return "", fmt.Errorf("DATABASE_URL or MYSQL_HOST is required")
 	}
 	port := os.Getenv(MysqlPortEnvVar)
 	if port == "" {
@@ -346,35 +268,29 @@ func getMysqlDSN() (string, bool, error) {
 	}
 	dbName, err := getEnvOrFile(MysqlDBEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get mysql DB name: %w", err)
+		return "", fmt.Errorf("failed to get MySQL database name: %w", err)
 	}
 	if dbName == "" {
 		dbName = "mcpjungle"
 	}
 	mysqlUser, err := getEnvOrFile(MysqlUserEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get mysql user: %w", err)
+		return "", fmt.Errorf("failed to get MySQL user: %w", err)
 	}
 	if mysqlUser == "" {
 		mysqlUser = "root"
 	}
 	password, err := getEnvOrFile(MysqlPasswordEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get mysql password: %w", err)
+		return "", fmt.Errorf("failed to get MySQL password: %w", err)
 	}
-	// password can be empty, so no default value
-	// url.QueryEscape credentials so passwords containing @:/?#& don't break the
-	// go-sql-driver DSN parser (parity with getPostgresDSN).
-	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		url.QueryEscape(mysqlUser),
-		url.QueryEscape(password),
-		host,
-		port,
-		url.QueryEscape(dbName),
-	)
 
-	return dsn, true, nil
+	raw := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", mysqlUser, password, host, port, dbName)
+	dsn, err := db.NormalizeMySQLDSN(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid MySQL configuration: %w", err)
+	}
+	return dsn, nil
 }
 
 // getMcpServerInitReqTimeout returns the timeout (in seconds) for MCP server initialization requests.
@@ -453,30 +369,12 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// connect to the DB and run migrations
-	dsn := os.Getenv(DBUrlEnvVar)
-
-	if dsn == "" {
-		// If DATABASE_URL isn't set, try to construct a Postgres DSN if postgres-specific env vars are set.
-		pgDSN, ok, err := getPostgresDSN()
-		if err != nil {
-			return fmt.Errorf("failed to get postgres DSN: %w", err)
-		}
-		if ok {
-			dsn = pgDSN
-		} else {
-			// Fall back to MySQL-specific env vars if they are set.
-			mysqlDSN, ok, err := getMysqlDSN()
-			if err != nil {
-				return fmt.Errorf("failed to get mysql DSN: %w", err)
-			}
-			if ok {
-				dsn = mysqlDSN
-			}
-		}
+	// Connect to the required MySQL database and run migrations.
+	dsn, err := getMysqlDSN()
+	if err != nil {
+		return fmt.Errorf("failed to resolve MySQL DSN: %w", err)
 	}
-
-	dbConn, err := db.NewDBConnection(dsn, getSQLiteDBPathOverride())
+	dbConn, err := db.NewDBConnection(dsn)
 	if err != nil {
 		return err
 	}

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -24,13 +23,13 @@ type ToolGroup struct {
 
 	// IncludedTools contains a list of tool names that are included in this group.
 	// storing the list of tool names as a JSON array is a convenient way for now.
-	IncludedTools datatypes.JSON `json:"included_tools"`
+	IncludedTools JSON `json:"included_tools"`
 
 	// IncludedServers contains a list of MCP server names. All tools from these servers will be included.
-	IncludedServers datatypes.JSON `json:"included_servers"`
+	IncludedServers JSON `json:"included_servers"`
 
 	// ExcludedTools contains a list of tool names to exclude from the group.
-	ExcludedTools datatypes.JSON `json:"excluded_tools"`
+	ExcludedTools JSON `json:"excluded_tools"`
 }
 
 // GetTools unmarshals the IncludedTools JSON array into a slice of strings.

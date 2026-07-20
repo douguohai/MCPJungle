@@ -1,7 +1,6 @@
 package model
 
 import (
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,11 +21,11 @@ type Tool struct {
 	Description string `json:"description"`
 
 	// InputSchema is a JSON schema that describes the input parameters for the tool.
-	InputSchema datatypes.JSON `json:"input_schema"`
+	InputSchema JSON `json:"input_schema"`
 
 	// Annotations stores tool annotation hints from the upstream MCP server.
 	// These hints help LLMs understand tool behavior (e.g., read-only vs destructive).
-	Annotations datatypes.JSON `json:"annotations"`
+	Annotations JSON `json:"annotations"`
 
 	// ServerID is the ID of the MCP server that provides this tool.
 	ServerID uint      `json:"-" gorm:"not null"`

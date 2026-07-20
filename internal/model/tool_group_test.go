@@ -3,8 +3,6 @@ package model
 import (
 	"encoding/json"
 	"testing"
-
-	"gorm.io/datatypes"
 )
 
 // mockToolResolver implements ToolResolver for testing
@@ -24,7 +22,7 @@ func TestToolGroup_GetTools(t *testing.T) {
 	toolsJSON, _ := json.Marshal(tools)
 
 	group := &ToolGroup{
-		IncludedTools: datatypes.JSON(toolsJSON),
+		IncludedTools: JSON(toolsJSON),
 	}
 
 	result, err := group.GetTools()
@@ -45,7 +43,7 @@ func TestToolGroup_GetServers(t *testing.T) {
 	serversJSON, _ := json.Marshal(servers)
 
 	group := &ToolGroup{
-		IncludedServers: datatypes.JSON(serversJSON),
+		IncludedServers: JSON(serversJSON),
 	}
 
 	result, err := group.GetServers()
@@ -66,7 +64,7 @@ func TestToolGroup_GetExcludedTools(t *testing.T) {
 	toolsJSON, _ := json.Marshal(tools)
 
 	group := &ToolGroup{
-		ExcludedTools: datatypes.JSON(toolsJSON),
+		ExcludedTools: JSON(toolsJSON),
 	}
 
 	result, err := group.GetExcludedTools()
@@ -103,7 +101,7 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		toolsJSON, _ := json.Marshal(tools)
 
 		group := &ToolGroup{
-			IncludedTools: datatypes.JSON(toolsJSON),
+			IncludedTools: JSON(toolsJSON),
 		}
 
 		result, err := group.ResolveEffectiveTools(resolver)
@@ -130,7 +128,7 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		serversJSON, _ := json.Marshal(servers)
 
 		group := &ToolGroup{
-			IncludedServers: datatypes.JSON(serversJSON),
+			IncludedServers: JSON(serversJSON),
 		}
 
 		result, err := group.ResolveEffectiveTools(resolver)
@@ -163,8 +161,8 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excludedJSON, _ := json.Marshal(excluded)
 
 		group := &ToolGroup{
-			IncludedServers: datatypes.JSON(serversJSON),
-			ExcludedTools:   datatypes.JSON(excludedJSON),
+			IncludedServers: JSON(serversJSON),
+			ExcludedTools:   JSON(excludedJSON),
 		}
 
 		result, err := group.ResolveEffectiveTools(resolver)
@@ -209,9 +207,9 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excludedJSON, _ := json.Marshal(excluded)
 
 		group := &ToolGroup{
-			IncludedTools:   datatypes.JSON(toolsJSON),
-			IncludedServers: datatypes.JSON(serversJSON),
-			ExcludedTools:   datatypes.JSON(excludedJSON),
+			IncludedTools:   JSON(toolsJSON),
+			IncludedServers: JSON(serversJSON),
+			ExcludedTools:   JSON(excludedJSON),
 		}
 
 		result, err := group.ResolveEffectiveTools(resolver)
@@ -250,8 +248,8 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excludedJSON, _ := json.Marshal(excluded)
 
 		group := &ToolGroup{
-			IncludedTools: datatypes.JSON(toolsJSON),
-			ExcludedTools: datatypes.JSON(excludedJSON),
+			IncludedTools: JSON(toolsJSON),
+			ExcludedTools: JSON(excludedJSON),
 		}
 
 		result, err := group.ResolveEffectiveTools(resolver)

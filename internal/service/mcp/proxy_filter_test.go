@@ -7,7 +7,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/datatypes"
 )
 
 func TestMcpProxyToolFilter(t *testing.T) {
@@ -34,7 +33,7 @@ func TestMcpProxyToolFilter(t *testing.T) {
 			mode: model.ModeEnterprise,
 			client: &model.McpClient{
 				Name:      "claude",
-				AllowList: datatypes.JSON(`["time"]`),
+				AllowList: model.JSON(`["time"]`),
 			},
 			tools: []mcp.Tool{
 				{Name: "time__get_current_time"},
@@ -47,7 +46,7 @@ func TestMcpProxyToolFilter(t *testing.T) {
 			mode: model.ModeEnterprise,
 			client: &model.McpClient{
 				Name:      "cursor",
-				AllowList: datatypes.JSON(`["*"]`),
+				AllowList: model.JSON(`["*"]`),
 			},
 			tools: []mcp.Tool{
 				{Name: "time__get_current_time"},
@@ -136,7 +135,7 @@ func TestMcpProxyToolFilter_EnterpriseMalformedToolNamesAreDenied(t *testing.T) 
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
 	ctx = context.WithValue(ctx, "client", &model.McpClient{
 		Name:      "claude",
-		AllowList: datatypes.JSON(`["time"]`),
+		AllowList: model.JSON(`["time"]`),
 	})
 
 	got := ProxyToolFilter(ctx, []mcp.Tool{

@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -52,7 +51,7 @@ type McpServer struct {
 
 	// Config describes the transport-specific configuration for the MCP server.
 	// It contains the JSON representation of either StreamableHTTPConfig or StdioConfig.
-	Config datatypes.JSON `json:"config" gorm:"not null"`
+	Config JSON `json:"config" gorm:"not null"`
 
 	// SessionMode controls how mcpjungle manages connections to this MCP server.
 	// "stateless" (default): Creates a new connection for each tool call.
@@ -109,7 +108,7 @@ func NewStdioServer(name, description, command string, args []string, env map[st
 		Description: description,
 		Transport:   types.TransportStdio,
 		Enabled:     true,
-		Config:      datatypes.JSON(configJSON),
+		Config:      JSON(configJSON),
 		SessionMode: sessionMode,
 	}, nil
 }

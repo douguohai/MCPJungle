@@ -5,55 +5,54 @@ import (
 	"testing"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/datatypes"
 )
 
 func TestMcpClient_CheckHasServerAccess(t *testing.T) {
 	cases := []struct {
 		name   string
-		allow  datatypes.JSON
+		allow  JSON
 		server string
 		want   bool
 	}{
 		{
 			name:   "nil allow list",
-			allow:  datatypes.JSON(nil),
+			allow:  JSON(nil),
 			server: "server-1",
 			want:   false,
 		},
 		{
 			name:   "empty array",
-			allow:  datatypes.JSON("[]"),
+			allow:  JSON("[]"),
 			server: "server-1",
 			want:   false,
 		},
 		{
 			name:   "global wildcard grants access",
-			allow:  datatypes.JSON(fmt.Sprintf(`["%s"]`, types.AllowAllMcpServers)),
+			allow:  JSON(fmt.Sprintf(`["%s"]`, types.AllowAllMcpServers)),
 			server: "any-server",
 			want:   true,
 		},
 		{
 			name:   "global wildcard mixed with other names",
-			allow:  datatypes.JSON(fmt.Sprintf(`["%s","server-a","server-b"]`, types.AllowAllMcpServers)),
+			allow:  JSON(fmt.Sprintf(`["%s","server-a","server-b"]`, types.AllowAllMcpServers)),
 			server: "any-server",
 			want:   true,
 		},
 		{
 			name:   "exact match allowed",
-			allow:  datatypes.JSON(`["server-a","server-b"]`),
+			allow:  JSON(`["server-a","server-b"]`),
 			server: "server-b",
 			want:   true,
 		},
 		{
 			name:   "exact match not present",
-			allow:  datatypes.JSON(`["server-a","server-b"]`),
+			allow:  JSON(`["server-a","server-b"]`),
 			server: "server-c",
 			want:   false,
 		},
 		{
 			name:   "malformed json returns false",
-			allow:  datatypes.JSON("not-json"),
+			allow:  JSON("not-json"),
 			server: "server-a",
 			want:   false,
 		},

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -26,10 +25,10 @@ type Resource struct {
 	MIMEType    string `json:"mime_type"`
 
 	// Annotations stores upstream MCP resource annotations.
-	Annotations datatypes.JSON `json:"annotations"`
+	Annotations JSON `json:"annotations"`
 
 	// Meta stores upstream MCP resource metadata.
-	Meta datatypes.JSON `json:"meta"`
+	Meta JSON `json:"meta"`
 
 	// ServerID is the ID of the MCP server that provides this resource.
 	ServerID uint      `json:"-" gorm:"not null"`

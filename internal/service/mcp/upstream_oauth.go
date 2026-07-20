@@ -17,7 +17,6 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -74,7 +73,7 @@ func (s *upstreamOAuthTokenStore) GetToken(ctx context.Context) (*mcpgotransport
 		TokenType:    record.TokenType,
 		RefreshToken: record.RefreshToken,
 		Scope:        record.Scope,
-		ExpiresAt:    record.ExpiresAt,
+		ExpiresAt:    timeValue(record.ExpiresAt),
 	}, nil
 }
 
@@ -92,7 +91,7 @@ func (s *upstreamOAuthTokenStore) SaveToken(ctx context.Context, token *mcpgotra
 		TokenType:    token.TokenType,
 		RefreshToken: token.RefreshToken,
 		Scope:        token.Scope,
-		ExpiresAt:    token.ExpiresAt,
+		ExpiresAt:    nullableTime(token.ExpiresAt),
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -110,13 +109,28 @@ func (s *upstreamOAuthTokenStore) SaveToken(ctx context.Context, token *mcpgotra
 		existing.TokenType = token.TokenType
 		existing.RefreshToken = token.RefreshToken
 		existing.Scope = token.Scope
-		existing.ExpiresAt = token.ExpiresAt
+		existing.ExpiresAt = nullableTime(token.ExpiresAt)
 		return tx.Save(&existing).Error
 	})
 }
 
+func nullableTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	copy := value
+	return &copy
+}
+
+func timeValue(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
+}
+
 // scopesToJSON converts a scope list into the JSON form stored in the DB.
-func scopesToJSON(scopes []string) datatypes.JSON {
+func scopesToJSON(scopes []string) model.JSON {
 	if len(scopes) == 0 {
 		return []byte("[]")
 	}
@@ -125,7 +139,7 @@ func scopesToJSON(scopes []string) datatypes.JSON {
 }
 
 // scopesFromJSON reads a stored scope list from the DB.
-func scopesFromJSON(data datatypes.JSON) ([]string, error) {
+func scopesFromJSON(data model.JSON) ([]string, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -137,7 +151,7 @@ func scopesFromJSON(data datatypes.JSON) ([]string, error) {
 }
 
 // ScopesFromJSONForAPI exposes the shared scope-decoding helper to the API layer.
-func ScopesFromJSONForAPI(data datatypes.JSON) ([]string, error) {
+func ScopesFromJSONForAPI(data model.JSON) ([]string, error) {
 	return scopesFromJSON(data)
 }
 

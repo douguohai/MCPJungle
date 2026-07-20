@@ -9,18 +9,15 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDBWithTools(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open in-memory db: %v", err)
-	}
+	db := testhelpers.RequireTestDB(t)
 
 	if err := db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.Prompt{}); err != nil {
 		t.Fatalf("failed to migrate schema: %v", err)

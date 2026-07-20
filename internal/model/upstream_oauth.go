@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -20,14 +19,14 @@ type UpstreamOAuthPendingSession struct {
 
 	// ServerInput stores the original RegisterServerInput payload so registration
 	// can be resumed after the OAuth callback completes.
-	ServerInput datatypes.JSON `json:"server_input" gorm:"not null"`
+	ServerInput JSON `json:"server_input" gorm:"not null"`
 
 	Force bool `json:"force" gorm:"not null;default:false"`
 
-	RedirectURI  string         `json:"redirect_uri"`
-	ClientID     string         `json:"client_id"`
-	ClientSecret string         `json:"client_secret"`
-	Scopes       datatypes.JSON `json:"scopes"`
+	RedirectURI  string `json:"redirect_uri"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	Scopes       JSON   `json:"scopes"`
 
 	State        string    `json:"state" gorm:"not null"`
 	CodeVerifier string    `json:"code_verifier" gorm:"not null"`
@@ -44,14 +43,14 @@ type UpstreamOAuthToken struct {
 	ServerName string                   `json:"server_name" gorm:"uniqueIndex;not null;type:varchar(255)"`
 	Transport  types.McpServerTransport `json:"transport" gorm:"type:varchar(30);not null"`
 
-	ClientID     string         `json:"client_id"`
-	ClientSecret string         `json:"client_secret"`
-	RedirectURI  string         `json:"redirect_uri"`
-	Scopes       datatypes.JSON `json:"scopes"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	RedirectURI  string `json:"redirect_uri"`
+	Scopes       JSON   `json:"scopes"`
 
-	AccessToken  string    `json:"access_token"`
-	TokenType    string    `json:"token_type"`
-	RefreshToken string    `json:"refresh_token"`
-	Scope        string    `json:"scope"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	AccessToken  string     `json:"access_token"`
+	TokenType    string     `json:"token_type"`
+	RefreshToken string     `json:"refresh_token"`
+	Scope        string     `json:"scope"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 }

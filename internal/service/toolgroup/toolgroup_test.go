@@ -12,7 +12,6 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"github.com/mcpjungle/mcpjungle/pkg/version"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -142,10 +141,7 @@ func TestValidGroupNameConsistency(t *testing.T) {
 
 func setupInMemoryDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := testhelpers.CreateTestDB()
-	if err != nil {
-		t.Fatalf("failed to open in-memory db: %v", err)
-	}
+	db := testhelpers.RequireTestDB(t)
 	if err := db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.ToolGroup{}, &model.Prompt{}, &model.Resource{}); err != nil {
 		t.Fatalf("failed to migrate test models: %v", err)
 	}
@@ -208,7 +204,7 @@ func TestResolveEffectiveTools_ReturnsSorted(t *testing.T) {
 	// sorts the result before returning.
 	group := model.ToolGroup{
 		Name:          "my-group",
-		IncludedTools: datatypes.JSON([]byte(`["tool-b","tool-a","tool-c"]`)),
+		IncludedTools: model.JSON(`["tool-b","tool-a","tool-c"]`),
 	}
 
 	if err := db.Create(&group).Error; err != nil {
@@ -285,11 +281,11 @@ func TestNewToolGroupService_DegradedPersistedGroupDoesNotFailStartup(t *testing
 
 	validGroup := model.ToolGroup{
 		Name:            "valid-group",
-		IncludedServers: datatypes.JSON([]byte(`["valid-server"]`)),
+		IncludedServers: model.JSON(`["valid-server"]`),
 	}
 	degradedGroup := model.ToolGroup{
 		Name:            "degraded-group",
-		IncludedServers: datatypes.JSON([]byte(`["missing-server"]`)),
+		IncludedServers: model.JSON(`["missing-server"]`),
 	}
 	if err := db.Create(&validGroup).Error; err != nil {
 		t.Fatalf("failed to persist valid group: %v", err)
@@ -343,7 +339,7 @@ func TestCreateToolGroup_InvalidIncludedServerStillFailsFast(t *testing.T) {
 
 	err := s.CreateToolGroup(&model.ToolGroup{
 		Name:            "invalid-server-group",
-		IncludedServers: datatypes.JSON([]byte(`["missing-server"]`)),
+		IncludedServers: model.JSON(`["missing-server"]`),
 	})
 	if err == nil {
 		t.Fatal("expected create tool group to fail for missing included server")

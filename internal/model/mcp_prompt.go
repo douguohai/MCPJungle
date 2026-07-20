@@ -1,7 +1,6 @@
 package model
 
 import (
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,7 +21,7 @@ type Prompt struct {
 	Description string `json:"description"`
 
 	// Arguments is a JSON schema that describes the input parameters for the prompt.
-	Arguments datatypes.JSON `json:"arguments"`
+	Arguments JSON `json:"arguments"`
 
 	// ServerID is the ID of the MCP server that provides this prompt.
 	ServerID uint      `json:"-" gorm:"not null"`

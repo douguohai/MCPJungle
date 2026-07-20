@@ -13,18 +13,15 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	mcpService "github.com/mcpjungle/mcpjungle/internal/service/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestPromptsIntegration(t *testing.T) {
 	// Setup test database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-
-	err = migrations.Migrate(db)
+	db := testhelpers.RequireTestDB(t)
+	err := migrations.Migrate(db)
 	require.NoError(t, err)
 
 	// Create MCP proxy server with prompt capabilities
@@ -121,10 +118,8 @@ func TestPromptsIntegration(t *testing.T) {
 }
 
 func TestResourcesIntegration(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-
-	err = migrations.Migrate(db)
+	db := testhelpers.RequireTestDB(t)
+	err := migrations.Migrate(db)
 	require.NoError(t, err)
 
 	mcpProxyServer := server.NewMCPServer(

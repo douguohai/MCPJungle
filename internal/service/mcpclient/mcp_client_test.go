@@ -11,8 +11,7 @@ import (
 )
 
 func TestNewMCPClientService(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	svc := NewMCPClientService(db)
 	testhelpers.AssertNotNil(t, svc)
@@ -68,11 +67,10 @@ func TestCreateClient(t *testing.T) {
 }
 
 func TestCreateClientWithExistingName(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -138,11 +136,10 @@ func TestCreateClientWithInvalidAccessToken(t *testing.T) {
 }
 
 func TestGetClientByToken(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -167,11 +164,10 @@ func TestGetClientByToken(t *testing.T) {
 }
 
 func TestGetClientByTokenNotFound(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -185,11 +181,10 @@ func TestGetClientByTokenNotFound(t *testing.T) {
 }
 
 func TestDeleteClient(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -214,11 +209,10 @@ func TestDeleteClient(t *testing.T) {
 }
 
 func TestDeleteClientNotFound(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -229,11 +223,10 @@ func TestDeleteClientNotFound(t *testing.T) {
 }
 
 func TestListClientsWithData(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)
@@ -267,11 +260,10 @@ func TestListClientsWithData(t *testing.T) {
 }
 
 func TestClientTokenUniqueness(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
-	testhelpers.AssertNoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 
 	// Auto-migrate the McpClient model
-	err = db.AutoMigrate(&model.McpClient{})
+	err := db.AutoMigrate(&model.McpClient{})
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewMCPClientService(db)

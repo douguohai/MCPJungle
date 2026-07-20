@@ -1,7 +1,7 @@
 // Package e2e contains end-to-end integration tests for MCPJungle against
 // @modelcontextprotocol/server-everything.
 //
-// Tests spin up a full MCPJungle HTTP server backed by an in-memory SQLite
+// Tests spin up a full MCPJungle HTTP server backed by an isolated MySQL table namespace,
 // database, register server-everything as a stdio upstream, then exercise every
 // major API surface:
 //   - Global tools: list, get, invoke
@@ -36,8 +36,8 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	userSvc "github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -118,8 +118,7 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 		t.Skip("npx not found in PATH – skipping server-everything end-to-end tests")
 	}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testhelpers.RequireTestDB(t)
 	require.NoError(t, migrations.Migrate(db))
 
 	mcpProxy := server.NewMCPServer("MCPJungle", "0.0.1",

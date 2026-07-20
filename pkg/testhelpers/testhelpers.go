@@ -4,21 +4,87 @@ package testhelpers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	projectdb "github.com/mcpjungle/mcpjungle/internal/db"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
-// CreateTestDB creates a test database using SQLite in-memory database
-func CreateTestDB() (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+const testDatabaseURLEnv = "MCPJUNGLE_TEST_DATABASE_URL"
+
+// RequireTestDB creates an isolated MySQL namespace for a test. Every test gets
+// a unique table prefix, so it does not need CREATE DATABASE permission and
+// cleanup cannot touch tables owned by another test or deployment.
+func RequireTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	raw := strings.TrimSpace(os.Getenv(testDatabaseURLEnv))
+	if raw == "" {
+		t.Skip(testDatabaseURLEnv + " is not configured")
+	}
+
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		t.Fatalf("generate test table prefix: %v", err)
+	}
+	prefix := "mcpjungle_test_" + hex.EncodeToString(suffix) + "_"
+
+	baseDB, err := projectdb.NewDBConnection(raw)
+	if err != nil {
+		t.Fatalf("connect to MySQL test server: %v", err)
+	}
+	sqlDB, err := baseDB.DB()
+	if err != nil {
+		t.Fatalf("get MySQL connection pool: %v", err)
+	}
+
+	database, err := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      sqlDB,
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{TablePrefix: prefix},
+	})
+	if err != nil {
+		t.Fatalf("create isolated MySQL test namespace: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx := context.Background()
+		conn, connErr := sqlDB.Conn(ctx)
+		if connErr == nil {
+			rows, queryErr := conn.QueryContext(ctx, "SHOW TABLES LIKE ?", prefix+"%")
+			var tables []string
+			if queryErr == nil {
+				for rows.Next() {
+					var table string
+					if scanErr := rows.Scan(&table); scanErr == nil {
+						tables = append(tables, table)
+					}
+				}
+				_ = rows.Close()
+			}
+			_, _ = conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0")
+			for _, table := range tables {
+				if strings.HasPrefix(table, prefix) {
+					_, _ = conn.ExecContext(ctx, "DROP TABLE IF EXISTS `"+table+"`")
+				}
+			}
+			_, _ = conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
+			_ = conn.Close()
+		}
+		_ = sqlDB.Close()
+	})
+	return database
 }
 
 // AssertError asserts that an error occurred
@@ -250,11 +316,10 @@ type TestDBSetup struct {
 func SetupTestDB(t *testing.T) *TestDBSetup {
 	t.Helper()
 
-	db, err := CreateTestDB()
-	AssertNoError(t, err)
+	db := RequireTestDB(t)
 
 	// Migrate all common models
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&model.User{},
 		&model.McpClient{},
 		&model.McpServer{},

@@ -1,493 +1,83 @@
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
+	"github.com/stretchr/testify/require"
 )
 
-// cleanupDBFiles removes both old and new database files and their associated WAL and SHM files
-func cleanupDBFiles(t *testing.T) {
-	dbFiles := []string{"mcp.db", "mcpjungle.db"}
-	extensions := []string{"", "-wal", "-shm"}
-
-	for _, dbFile := range dbFiles {
-		for _, ext := range extensions {
-			file := dbFile + ext
-			if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-				t.Logf("Failed to clean up %s: %v", file, err)
-			}
-		}
-	}
-}
-
-// cleanupDBFilesBenchmark is the same as cleanupDBFiles but for benchmark tests
-func cleanupDBFilesBenchmark(b *testing.B) {
-	dbFiles := []string{"mcp.db", "mcpjungle.db"}
-	extensions := []string{"", "-wal", "-shm"}
-
-	for _, dbFile := range dbFiles {
-		for _, ext := range extensions {
-			file := dbFile + ext
-			if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-				b.Logf("Failed to clean up %s: %v", file, err)
-			}
-		}
-	}
-}
-
-func TestNewDBConnection(t *testing.T) {
+func TestNormalizeMySQLDSN(t *testing.T) {
 	tests := []struct {
-		name        string
-		dsn         string
-		expectError bool
-		cleanup     func()
+		name  string
+		input string
+		want  string
 	}{
 		{
-			name:        "empty DSN should use SQLite fallback",
-			dsn:         "",
-			expectError: false,
-			cleanup: func() {
-				cleanupDBFiles(t)
-			},
+			name:  "URL",
+			input: "mysql://user:pass@db:3306/hub",
+			want:  "user:pass@tcp(db:3306)/hub?charset=utf8mb4&parseTime=True&loc=UTC",
 		},
 		{
-			name:        "invalid PostgreSQL DSN should return error",
-			dsn:         "postgres://invalid:invalid@localhost:5432/invalid",
-			expectError: true,
-			cleanup:     func() {},
+			name:  "native DSN",
+			input: "user:pass@tcp(db:3306)/hub",
+			want:  "user:pass@tcp(db:3306)/hub?charset=utf8mb4&parseTime=True&loc=UTC",
 		},
 		{
-			name:        "malformed DSN should return error",
-			dsn:         "invalid://dsn",
-			expectError: true,
-			cleanup:     func() {},
+			name:  "preserves existing parameters",
+			input: "user:pass@tcp(db:3306)/hub?timeout=5s",
+			want:  "user:pass@tcp(db:3306)/hub?timeout=5s&charset=utf8mb4&parseTime=True&loc=UTC",
+		},
+		{
+			name:  "does not duplicate defaults",
+			input: "user:pass@tcp(db:3306)/hub?charset=utf8mb4&parseTime=True&loc=UTC",
+			want:  "user:pass@tcp(db:3306)/hub?charset=utf8mb4&parseTime=True&loc=UTC",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Cleanup before test
-			tt.cleanup()
-
-			db, err := NewDBConnection(tt.dsn, "")
-
-			if tt.expectError {
-				testhelpers.AssertError(t, err)
-				if db != nil {
-					t.Errorf("Expected db to be nil, got %v", db)
-				}
-			} else {
-				testhelpers.AssertNoError(t, err)
-				testhelpers.AssertNotNil(t, db)
-
-				// Verify it's a valid GORM database instance
-				sqlDB, err := db.DB()
-				testhelpers.AssertNoError(t, err)
-				testhelpers.AssertNotNil(t, sqlDB)
-
-				// Test basic connectivity
-				err = sqlDB.Ping()
-				testhelpers.AssertNoError(t, err)
-
-				// Close the connection
-				err = sqlDB.Close()
-				testhelpers.AssertNoError(t, err)
-			}
-
-			// Cleanup after test
-			tt.cleanup()
+			got, err := NormalizeMySQLDSN(tt.input)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestNewDBConnection_SQLiteFallback(t *testing.T) {
-	// Ensure no existing database files
-	cleanup := func() {
-		cleanupDBFiles(t)
-	}
-
-	cleanup()
-	defer cleanup()
-
-	// Test with empty DSN
-	db, err := NewDBConnection("", "")
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db)
-
-	// Verify SQLite database file was created (should be the new name)
-	_, err = os.Stat("mcpjungle.db")
-	testhelpers.AssertNoError(t, err)
-
-	// Test database operations
-	sqlDB, err := db.DB()
-	testhelpers.AssertNoError(t, err)
-
-	// Test ping
-	err = sqlDB.Ping()
-	testhelpers.AssertNoError(t, err)
-
-	// Test basic query
-	var result int
-	err = db.Raw("SELECT 1").Scan(&result).Error
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertEqual(t, 1, result)
-
-	// Close connection
-	err = sqlDB.Close()
-	testhelpers.AssertNoError(t, err)
-}
-
-func TestNewDBConnection_DatabaseConfiguration(t *testing.T) {
-	cleanup := func() {
-		cleanupDBFiles(t)
-	}
-
-	cleanup()
-	defer cleanup()
-
-	db, err := NewDBConnection("", "")
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db)
-
-	// Verify logger configuration is set to Silent
-	// This is harder to test directly, but we can verify the database works
-	sqlDB, err := db.DB()
-	testhelpers.AssertNoError(t, err)
-
-	// Test that database operations work (indicating proper configuration)
-	err = sqlDB.Ping()
-	testhelpers.AssertNoError(t, err)
-
-	// Test a simple query
-	var result string
-	err = db.Raw("SELECT 'test'").Scan(&result).Error
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertEqual(t, "test", result)
-
-	err = sqlDB.Close()
-	testhelpers.AssertNoError(t, err)
-}
-
-func TestNewDBConnection_ConcurrentAccess(t *testing.T) {
-	cleanup := func() {
-		cleanupDBFiles(t)
-	}
-
-	cleanup()
-	defer cleanup()
-
-	// Test creating multiple connections to the same SQLite database
-	db1, err := NewDBConnection("", "")
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db1)
-
-	db2, err := NewDBConnection("", "")
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db2)
-
-	// Both should work
-	sqlDB1, err := db1.DB()
-	testhelpers.AssertNoError(t, err)
-
-	sqlDB2, err := db2.DB()
-	testhelpers.AssertNoError(t, err)
-
-	// Test both connections
-	err = sqlDB1.Ping()
-	testhelpers.AssertNoError(t, err)
-
-	err = sqlDB2.Ping()
-	testhelpers.AssertNoError(t, err)
-
-	// Close connections
-	err = sqlDB1.Close()
-	testhelpers.AssertNoError(t, err)
-
-	err = sqlDB2.Close()
-	testhelpers.AssertNoError(t, err)
-}
-
-func TestNewDBConnection_WithCustomPath(t *testing.T) {
-	// Test with a custom SQLite path by setting working directory
-	originalDir, err := os.Getwd()
-	testhelpers.AssertNoError(t, err)
-
-	tempDir := t.TempDir()
-	err = os.Chdir(tempDir)
-	testhelpers.AssertNoError(t, err)
-
-	defer func() {
-		err = os.Chdir(originalDir)
-		testhelpers.AssertNoError(t, err)
-	}()
-
-	// Test SQLite creation in temp directory
-	db, err := NewDBConnection("", "")
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db)
-
-	// Verify database file was created in temp directory
-	dbPath := filepath.Join(tempDir, "mcpjungle.db")
-	_, err = os.Stat(dbPath)
-	testhelpers.AssertNoError(t, err)
-
-	sqlDB, err := db.DB()
-	testhelpers.AssertNoError(t, err)
-
-	err = sqlDB.Ping()
-	testhelpers.AssertNoError(t, err)
-
-	err = sqlDB.Close()
-	testhelpers.AssertNoError(t, err)
-}
-
-func TestNewDBConnection_WithExplicitSQLitePath(t *testing.T) {
-	originalDir, err := os.Getwd()
-	testhelpers.AssertNoError(t, err)
-
-	tempDir := t.TempDir()
-	err = os.Chdir(tempDir)
-	testhelpers.AssertNoError(t, err)
-
-	defer func() {
-		err = os.Chdir(originalDir)
-		testhelpers.AssertNoError(t, err)
-	}()
-
-	customPath := filepath.Join(tempDir, ".mcpjungle.db")
-	db, err := NewDBConnection("", customPath)
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, db)
-
-	_, err = os.Stat(customPath)
-	testhelpers.AssertNoError(t, err)
-
-	_, err = os.Stat(filepath.Join(tempDir, dbFilename))
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected default database file to not exist, got err=%v", err)
-	}
-
-	sqlDB, err := db.DB()
-	testhelpers.AssertNoError(t, err)
-	err = sqlDB.Close()
-	testhelpers.AssertNoError(t, err)
-}
-
-func TestNewDBConnection_ErrorHandling(t *testing.T) {
+func TestNormalizeMySQLDSNRejectsUnsupportedValues(t *testing.T) {
 	tests := []struct {
-		name string
-		dsn  string
+		name  string
+		input string
+		error string
 	}{
-		{
-			name: "invalid host",
-			dsn:  "postgres://user:pass@invalidhost:5432/db",
-		},
-		{
-			name: "invalid port",
-			dsn:  "postgres://user:pass@localhost:99999/db",
-		},
-		{
-			name: "invalid credentials",
-			dsn:  "postgres://invaliduser:invalidpass@localhost:5432/db",
-		},
-		{
-			name: "malformed URL",
-			dsn:  "not-a-valid-url",
-		},
-		{
-			name: "unsupported database",
-			dsn:  "mongodb://user:pass@localhost:27017/db",
-		},
+		{name: "empty", input: "", error: "MySQL DSN is required"},
+		{name: "PostgreSQL", input: "postgres://user:pass@db:5432/hub", error: "only MySQL is supported"},
+		{name: "unsupported URL", input: "mongodb://user:pass@db:27017/hub", error: "only MySQL is supported"},
+		{name: "URL without database", input: "mysql://user:pass@db:3306", error: "database name is required"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, err := NewDBConnection(tt.dsn, "")
-			testhelpers.AssertError(t, err)
-			if db != nil {
-				t.Errorf("Expected db to be nil, got %v", db)
-			}
+			got, err := NormalizeMySQLDSN(tt.input)
+			require.Empty(t, got)
+			require.ErrorContains(t, err, tt.error)
 		})
 	}
 }
 
-// Benchmark tests
-func BenchmarkNewDBConnection_SQLite(b *testing.B) {
-	cleanup := func() {
-		cleanupDBFilesBenchmark(b)
-	}
-
-	cleanup()
-	defer cleanup()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		db, err := NewDBConnection("", "")
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		sqlDB, err := db.DB()
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		sqlDB.Close()
-	}
+func TestNewDBConnectionRejectsEmptyDSN(t *testing.T) {
+	database, err := NewDBConnection("")
+	require.Nil(t, database)
+	require.ErrorContains(t, err, "MySQL DSN is required")
 }
 
-// Test backward compatibility and new database file functionality
-func TestSQLiteDBPath_BackwardCompatibility(t *testing.T) {
-	cleanup := func() {
-		cleanupDBFiles(t)
-	}
-
-	tests := []struct {
-		name           string
-		setup          func()
-		expectedDBFile string
-		expectWarning  bool
-	}{
-		{
-			name:           "no existing files - should create new file",
-			setup:          func() {},
-			expectedDBFile: "mcpjungle.db",
-			expectWarning:  false,
-		},
-		{
-			name: "old file exists - should use old file with warning",
-			setup: func() {
-				oldDB, err := os.Create("mcp.db")
-				testhelpers.AssertNoError(t, err)
-				oldDB.Close()
-			},
-			expectedDBFile: "mcp.db",
-			expectWarning:  true,
-		},
-		{
-			name: "new file exists - should use new file",
-			setup: func() {
-				newDB, err := os.Create("mcpjungle.db")
-				testhelpers.AssertNoError(t, err)
-				newDB.Close()
-			},
-			expectedDBFile: "mcpjungle.db",
-			expectWarning:  false,
-		},
-		{
-			name: "both files exist - should prefer new file",
-			setup: func() {
-				oldDB, err := os.Create("mcp.db")
-				testhelpers.AssertNoError(t, err)
-				oldDB.Close()
-
-				newDB, err := os.Create("mcpjungle.db")
-				testhelpers.AssertNoError(t, err)
-				newDB.Close()
-			},
-			expectedDBFile: "mcpjungle.db",
-			expectWarning:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cleanup() // Clean up before each test
-			tt.setup()
-
-			// Test the path selection logic
-			result := getSQLiteDBPath()
-			testhelpers.AssertEqual(t, tt.expectedDBFile, result)
-
-			// Test that the database connection actually works
-			db, err := NewDBConnection("", "")
-			testhelpers.AssertNoError(t, err)
-			testhelpers.AssertNotNil(t, db)
-
-			// Verify the expected database file exists
-			_, err = os.Stat(tt.expectedDBFile)
-			testhelpers.AssertNoError(t, err)
-
-			// Test basic functionality
-			sqlDB, err := db.DB()
-			testhelpers.AssertNoError(t, err)
-			err = sqlDB.Ping()
-			testhelpers.AssertNoError(t, err)
-			err = sqlDB.Close()
-			testhelpers.AssertNoError(t, err)
-
-			cleanup() // Clean up after each test
-		})
-	}
+func TestNewDBConnectionRejectsPostgresDSN(t *testing.T) {
+	database, err := NewDBConnection("postgres://user:pass@db:5432/hub")
+	require.Nil(t, database)
+	require.ErrorContains(t, err, "only MySQL is supported")
 }
 
-func TestResolveSQLiteDBPath(t *testing.T) {
-	t.Run("uses explicit path without legacy fallback", func(t *testing.T) {
-		customPath := filepath.Join(t.TempDir(), ".mcpjungle.db")
-		testhelpers.AssertEqual(t, customPath, resolveSQLiteDBPath(customPath))
-	})
-
-	t.Run("uses compatibility lookup when path is not configured", func(t *testing.T) {
-		cleanupDBFiles(t)
-		defer cleanupDBFiles(t)
-
-		oldDB, err := os.Create(deprecatedDBFilename)
-		testhelpers.AssertNoError(t, err)
-		testhelpers.AssertNoError(t, oldDB.Close())
-
-		testhelpers.AssertEqual(t, deprecatedDBFilename, resolveSQLiteDBPath(""))
-	})
-}
-
-func TestDetectDialector(t *testing.T) {
-	tests := []struct {
-		name     string
-		dsn      string
-		wantName string
-	}{
-		{"mysql url", "mysql://user:pass@localhost:3306/db", "mysql"},
-		{"mysql short scheme", "mysql:user:pass@tcp(localhost:3306)/db", "mysql"},
-		{"mysql native dsn", "user:pass@tcp(localhost:3306)/db", "mysql"},
-		{"postgres url", "postgres://user:pass@localhost:5432/db", "postgres"},
-		{"other scheme falls back to postgres", "mongodb://user:pass@localhost:27017/db", "postgres"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := detectDialector(tt.dsn).Name()
-			testhelpers.AssertEqual(t, tt.wantName, got)
-		})
-	}
-}
-
-func TestMysqlDSNFromURL(t *testing.T) {
-	tests := []struct {
-		name string
-		dsn  string
-		want string
-	}{
-		{
-			name: "mysql url with port",
-			dsn:  "mysql://user:pass@localhost:3306/mcpjungle",
-			want: "user:pass@tcp(localhost:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local",
-		},
-		{
-			name: "mysql url without port defaults to 3306",
-			dsn:  "mysql://user:pass@localhost/mcpjungle",
-			want: "user:pass@tcp(localhost:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local",
-		},
-		{
-			name: "native dsn gets default params appended",
-			dsn:  "user:pass@tcp(localhost:3306)/db",
-			want: "user:pass@tcp(localhost:3306)/db?charset=utf8mb4&parseTime=True&loc=Local",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := mysqlDSNFromURL(tt.dsn)
-			testhelpers.AssertEqual(t, tt.want, got)
-		})
-	}
+func TestMaskDSNRedactsPassword(t *testing.T) {
+	masked := maskDSN("user:secret@tcp(db:3306)/hub")
+	require.Equal(t, "user:***@tcp(db:3306)/hub", masked)
+	require.NotContains(t, masked, "secret")
 }
