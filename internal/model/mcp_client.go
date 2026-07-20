@@ -12,15 +12,15 @@ import (
 type McpClient struct {
 	gorm.Model
 
-	Name        string `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string `json:"name" gorm:"uniqueIndex;not null;type:varchar(255)"`
 	Description string `json:"description"`
 
-	AccessToken string `json:"access_token" gorm:"unique; not null"`
+	AccessToken string `json:"access_token" gorm:"unique; not null;type:varchar(255)"`
 
 	// AllowList contains a list of MCP Server names that this client is allowed to view and call
 	// storing the list of server names as a JSON array is a convenient way for now.
 	// In the future, this will be removed in favor of a separate table for ACLs.
-	AllowList datatypes.JSON `json:"allow_list" gorm:"type:jsonb; not null"`
+	AllowList datatypes.JSON `json:"allow_list" gorm:"not null"`
 }
 
 // CheckHasServerAccess returns true if this client has access to the specified MCP server.

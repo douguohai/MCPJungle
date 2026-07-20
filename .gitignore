@@ -32,6 +32,10 @@ go.work.sum
 # Added by goreleaser init:
 dist/
 
+# keep the embedded dashboard bundle tracked (placeholder + build output)
+!internal/dashboardui/dist/
+!internal/dashboardui/dist/**
+
 # Local dev
 mcpjungle
 mcp.db

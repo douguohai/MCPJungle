@@ -18,6 +18,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/api"
+	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/db"
 	"github.com/mcpjungle/mcpjungle/internal/migrations"
 	"github.com/mcpjungle/mcpjungle/internal/model"
@@ -48,6 +49,14 @@ const (
 	PostgresUserEnvVar     = "POSTGRES_USER"
 	PostgresPasswordEnvVar = "POSTGRES_PASSWORD"
 	PostgresDBEnvVar       = "POSTGRES_DB"
+)
+
+const (
+	MysqlHostEnvVar     = "MYSQL_HOST"
+	MysqlPortEnvVar     = "MYSQL_PORT"
+	MysqlUserEnvVar     = "MYSQL_USER"
+	MysqlPasswordEnvVar = "MYSQL_PASSWORD"
+	MysqlDBEnvVar       = "MYSQL_DB"
 )
 
 const (
@@ -84,6 +93,8 @@ var startServerCmd = &cobra.Command{
 		"eg: export DATABASE_URL='postgres://user:password@localhost:5432/mcpjungle'\n" +
 		"For Postgres, you can also set individual connection details using the following environment variables:\n" +
 		"POSTGRES_HOST, POSTGRES_PORT (default 5432), POSTGRES_USER (default postgres), POSTGRES_PASSWORD, POSTGRES_DB (default postgres)\n\n" +
+			"For MySQL, set DATABASE_URL='mysql://user:password@localhost:3306/mcpjungle'\n" +
+			"or use MYSQL_HOST, MYSQL_PORT (default 3306), MYSQL_USER (default root), MYSQL_PASSWORD, MYSQL_DB (default mcpjungle).\n\n" +
 		"You can also configure the amount of time (in seconds) mcpjungle will wait for a new MCP server's initialization before aborting it.\n" +
 		"Set the MCP_SERVER_INIT_REQ_TIMEOUT_SEC environment variable to an integer (default is 30).\n" +
 		"This is useful when you register a MCP server (usually stdio, like filesystem) that may take some time to start up.\n\n" +
@@ -319,6 +330,53 @@ func getPostgresDSN() (string, bool, error) {
 	return dsn, true, nil
 }
 
+// getMysqlDSN constructs a MySQL DSN from individual MySQL-specific environment variables & files.
+// It provides an alternative to DATABASE_URL for specifying MySQL connection details.
+// If MYSQL_HOST is not set, this function assumes that MySQL-specific env vars are not being used
+// and returns ok=false.
+// Other MySQL env vars are optional and have sensible defaults.
+func getMysqlDSN() (string, bool, error) {
+	host := os.Getenv(MysqlHostEnvVar)
+	if host == "" {
+		return "", false, nil
+	}
+	port := os.Getenv(MysqlPortEnvVar)
+	if port == "" {
+		port = "3306"
+	}
+	dbName, err := getEnvOrFile(MysqlDBEnvVar)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get mysql DB name: %w", err)
+	}
+	if dbName == "" {
+		dbName = "mcpjungle"
+	}
+	mysqlUser, err := getEnvOrFile(MysqlUserEnvVar)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get mysql user: %w", err)
+	}
+	if mysqlUser == "" {
+		mysqlUser = "root"
+	}
+	password, err := getEnvOrFile(MysqlPasswordEnvVar)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get mysql password: %w", err)
+	}
+	// password can be empty, so no default value
+	// url.QueryEscape credentials so passwords containing @:/?#& don't break the
+	// go-sql-driver DSN parser (parity with getPostgresDSN).
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		url.QueryEscape(mysqlUser),
+		url.QueryEscape(password),
+		host,
+		port,
+		url.QueryEscape(dbName),
+	)
+
+	return dsn, true, nil
+}
+
 // getMcpServerInitReqTimeout returns the timeout (in seconds) for MCP server initialization requests.
 // If the corresponding environment variable is not set, it returns the default value.
 // If the value is invalid, it returns an error.
@@ -406,6 +464,15 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		}
 		if ok {
 			dsn = pgDSN
+		} else {
+			// Fall back to MySQL-specific env vars if they are set.
+			mysqlDSN, ok, err := getMysqlDSN()
+			if err != nil {
+				return fmt.Errorf("failed to get mysql DSN: %w", err)
+			}
+			if ok {
+				dsn = mysqlDSN
+			}
 		}
 	}
 
@@ -471,6 +538,14 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create Tool Group service: %v", err)
 	}
 
+	// Resolve the JWT signing secret. In dev mode an unset secret yields an
+	// ephemeral random one; in enterprise mode it is required (fail-closed).
+	authSecret, err := auth.ResolveSecret(desiredServerMode == model.ModeDev)
+	if err != nil {
+		return err
+	}
+	authSigner := auth.NewSigner(authSecret)
+
 	// create the API server
 	opts := &api.ServerOptions{
 		MCPProxyServer:    mcpProxyServer,
@@ -483,6 +558,7 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		DashboardService:  dashboardService,
 		OtelProviders:     otelProviders,
 		Metrics:           mcpMetrics,
+		AuthSigner:        authSigner,
 	}
 	s, err := api.NewServer(opts)
 	if err != nil {

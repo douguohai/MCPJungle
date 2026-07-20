@@ -19,18 +19,18 @@ type ToolResolver interface {
 type ToolGroup struct {
 	gorm.Model
 
-	Name        string `json:"name" gorm:"unique; not null"`
+	Name        string `json:"name" gorm:"unique; not null;type:varchar(255)"`
 	Description string `json:"description"`
 
 	// IncludedTools contains a list of tool names that are included in this group.
 	// storing the list of tool names as a JSON array is a convenient way for now.
-	IncludedTools datatypes.JSON `json:"included_tools" gorm:"type:jsonb"`
+	IncludedTools datatypes.JSON `json:"included_tools"`
 
 	// IncludedServers contains a list of MCP server names. All tools from these servers will be included.
-	IncludedServers datatypes.JSON `json:"included_servers" gorm:"type:jsonb"`
+	IncludedServers datatypes.JSON `json:"included_servers"`
 
 	// ExcludedTools contains a list of tool names to exclude from the group.
-	ExcludedTools datatypes.JSON `json:"excluded_tools" gorm:"type:jsonb"`
+	ExcludedTools datatypes.JSON `json:"excluded_tools"`
 }
 
 // GetTools unmarshals the IncludedTools JSON array into a slice of strings.

@@ -1,11 +1,3 @@
-export type AppSection =
-  | "servers"
-  | "tools"
-  | "tool_groups"
-  | "prompts"
-  | "resources"
-  | "diagnostics";
-
 export interface DashboardEmptyState {
   title: string;
   description: string;
@@ -153,9 +145,11 @@ export interface DashboardDiagnosticsResponse {
   empty_state?: DashboardEmptyState;
 }
 
+export type McpTransport = "stdio" | "streamable_http" | "sse";
+
 export interface DashboardRegisterServerInput {
   name: string;
-  transport: "stdio" | "streamable_http" | "sse";
+  transport: McpTransport;
   description?: string;
   url?: string;
   bearer_token?: string;
@@ -186,10 +180,20 @@ export interface DashboardRegisterServerResponse {
   authorization_required?: DashboardOAuthAuthorizationRequired;
 }
 
-export interface DashboardOAuthSessionResponse {
-  session_id: string;
-  status: "pending" | "completed" | "failed" | "expired";
-  server_name?: string;
-  expires_at?: string;
-  error?: string;
+export interface VerifyTokenResponse {
+  authenticated: boolean;
+  mode: string;
+  username?: string;
+  role?: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expires_at: string;
+  user: { username: string; role: string };
+}
+
+export interface DashboardUser {
+  username?: string;
+  role?: string;
 }

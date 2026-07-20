@@ -37,7 +37,9 @@ func Save(c *ClientConfig) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(path)
+	// 0o600: the config may hold a credential (session token or PAT); restrict
+	// it to the owner.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}

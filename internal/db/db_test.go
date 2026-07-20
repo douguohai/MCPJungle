@@ -299,7 +299,7 @@ func TestNewDBConnection_ErrorHandling(t *testing.T) {
 		},
 		{
 			name: "unsupported database",
-			dsn:  "mysql://user:pass@localhost:3306/db",
+			dsn:  "mongodb://user:pass@localhost:27017/db",
 		},
 	}
 
@@ -440,4 +440,54 @@ func TestResolveSQLiteDBPath(t *testing.T) {
 
 		testhelpers.AssertEqual(t, deprecatedDBFilename, resolveSQLiteDBPath(""))
 	})
+}
+
+func TestDetectDialector(t *testing.T) {
+	tests := []struct {
+		name     string
+		dsn      string
+		wantName string
+	}{
+		{"mysql url", "mysql://user:pass@localhost:3306/db", "mysql"},
+		{"mysql short scheme", "mysql:user:pass@tcp(localhost:3306)/db", "mysql"},
+		{"mysql native dsn", "user:pass@tcp(localhost:3306)/db", "mysql"},
+		{"postgres url", "postgres://user:pass@localhost:5432/db", "postgres"},
+		{"other scheme falls back to postgres", "mongodb://user:pass@localhost:27017/db", "postgres"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detectDialector(tt.dsn).Name()
+			testhelpers.AssertEqual(t, tt.wantName, got)
+		})
+	}
+}
+
+func TestMysqlDSNFromURL(t *testing.T) {
+	tests := []struct {
+		name string
+		dsn  string
+		want string
+	}{
+		{
+			name: "mysql url with port",
+			dsn:  "mysql://user:pass@localhost:3306/mcpjungle",
+			want: "user:pass@tcp(localhost:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local",
+		},
+		{
+			name: "mysql url without port defaults to 3306",
+			dsn:  "mysql://user:pass@localhost/mcpjungle",
+			want: "user:pass@tcp(localhost:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local",
+		},
+		{
+			name: "native dsn gets default params appended",
+			dsn:  "user:pass@tcp(localhost:3306)/db",
+			want: "user:pass@tcp(localhost:3306)/db?charset=utf8mb4&parseTime=True&loc=Local",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mysqlDSNFromURL(tt.dsn)
+			testhelpers.AssertEqual(t, tt.want, got)
+		})
+	}
 }

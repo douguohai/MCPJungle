@@ -44,7 +44,7 @@ type SSEConfig struct {
 type McpServer struct {
 	gorm.Model
 
-	Name      string                   `json:"name" gorm:"uniqueIndex;not null"`
+	Name      string                   `json:"name" gorm:"uniqueIndex;not null;type:varchar(255)"`
 	Transport types.McpServerTransport `json:"transport" gorm:"type:varchar(30);not null"`
 	Enabled   bool                     `json:"enabled" gorm:"default:true"`
 
@@ -52,7 +52,7 @@ type McpServer struct {
 
 	// Config describes the transport-specific configuration for the MCP server.
 	// It contains the JSON representation of either StreamableHTTPConfig or StdioConfig.
-	Config datatypes.JSON `json:"config" gorm:"type:jsonb;not null"`
+	Config datatypes.JSON `json:"config" gorm:"not null"`
 
 	// SessionMode controls how mcpjungle manages connections to this MCP server.
 	// "stateless" (default): Creates a new connection for each tool call.

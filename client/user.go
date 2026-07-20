@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
@@ -145,4 +146,39 @@ func (c *Client) Whoami(accessToken string) (*types.User, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &user, nil
+}
+
+// Login authenticates with username+password and returns a short-lived session
+// JWT. Unlike the /v0 endpoints, login lives under /api/dashboard/auth.
+func (c *Client) Login(username, password string) (string, error) {
+	u, _ := url.JoinPath(c.baseURL, "/api/dashboard/auth/login")
+	payload := struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}{
+		Username: username,
+		Password: password,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.httpClient.Post(u, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to send request to %s: %w", u, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", c.parseErrorResponse(resp)
+	}
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+	if loginResp.Token == "" {
+		return "", fmt.Errorf("server did not return a session token")
+	}
+	return loginResp.Token, nil
 }

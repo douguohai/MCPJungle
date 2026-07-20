@@ -9,6 +9,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -21,16 +22,23 @@ func NewUserService(db *gorm.DB) *UserService {
 	return &UserService{db: db}
 }
 
-// CreateAdminUser creates an admin user in the MCPJungle system.
-func (u *UserService) CreateAdminUser() (*model.User, error) {
-	token, err := internal.GenerateAccessToken()
+// CreateAdminUser creates an admin user with the given username and password.
+// The password is bcrypt-hashed before storage; the plaintext is never persisted.
+func (u *UserService) CreateAdminUser(username, password string) (*model.User, error) {
+	if password == "" {
+		return nil, fmt.Errorf("admin password must not be empty: %w", apierrors.ErrInvalidInput)
+	}
+	if username == "" {
+		username = "admin"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to hash admin password: %w", err)
 	}
 	user := model.User{
-		Username:    "admin",
-		Role:        types.UserRoleAdmin,
-		AccessToken: token,
+		Username:     username,
+		Role:         types.UserRoleAdmin,
+		PasswordHash: string(hash),
 	}
 	if err := u.db.Create(&user).Error; err != nil {
 		return nil, fmt.Errorf("failed to create admin user: %w", err)
@@ -38,8 +46,9 @@ func (u *UserService) CreateAdminUser() (*model.User, error) {
 	return &user, nil
 }
 
-// GetUserByAccessToken returns a user associated with the provided access token.
-// If no user is found, an error is returned.
+// GetUserByAccessToken returns a user associated with the provided (legacy)
+// access token. Retained for backward compatibility during the migration to
+// password+JWT auth; new logins go through VerifyPassword.
 func (u *UserService) GetUserByAccessToken(token string) (*model.User, error) {
 	var user model.User
 	if err := u.db.Where("access_token = ?", token).First(&user).Error; err != nil {
@@ -49,6 +58,51 @@ func (u *UserService) GetUserByAccessToken(token string) (*model.User, error) {
 		return nil, fmt.Errorf("failed to verify token: %w", err)
 	}
 	return &user, nil
+}
+
+// GetUserByUsername returns the user with the given username.
+func (u *UserService) GetUserByUsername(username string) (*model.User, error) {
+	var user model.User
+	if err := u.db.Where("username = ?", username).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to find user: %w", err)
+	}
+	return &user, nil
+}
+
+// VerifyPassword authenticates a user by username+password. It returns
+// apierrors.ErrInvalidCredentials for any mismatch (unknown user, unset
+// password, or wrong password) so callers cannot distinguish which failed.
+func (u *UserService) VerifyPassword(username, password string) (*model.User, error) {
+	user, err := u.GetUserByUsername(username)
+	if err != nil {
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+		}
+		return nil, err
+	}
+	if user.PasswordHash == "" {
+		// legacy/migrated user has not set a password yet
+		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+	}
+	return user, nil
+}
+
+// SetPasswordHash is a helper that bcrypt-hashes a plaintext password.
+func SetPasswordHash(password string) (string, error) {
+	if password == "" {
+		return "", fmt.Errorf("password must not be empty: %w", apierrors.ErrInvalidInput)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
 }
 
 // CreateUser creates a new user with the specified username.

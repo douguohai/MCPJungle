@@ -2,6 +2,8 @@
 package migrations
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/mcpjungle/mcpjungle/internal/model"
@@ -40,5 +42,52 @@ func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(&model.UpstreamOAuthToken{}); err != nil {
 		return fmt.Errorf("auto-migration failed for UpstreamOAuthToken model: %v", err)
 	}
+	if err := db.AutoMigrate(&model.PersonalAccessToken{}); err != nil {
+		return fmt.Errorf("auto-migration failed for PersonalAccessToken model: %v", err)
+	}
+	if err := migrateLegacyAccessTokens(db); err != nil {
+		return fmt.Errorf("failed to migrate legacy access tokens: %v", err)
+	}
 	return nil
+}
+
+// migrateLegacyAccessTokens converts each user's legacy plaintext access_token
+// into a PersonalAccessToken (hash only) so existing CLI/automation tokens keep
+// working as PATs after the move to password+JWT auth. Idempotent.
+func migrateLegacyAccessTokens(db *gorm.DB) error {
+	var users []model.User
+	if err := db.Where("access_token != ''").Find(&users).Error; err != nil {
+		return fmt.Errorf("failed to load users: %w", err)
+	}
+	for i := range users {
+		u := users[i]
+		var count int64
+		if err := db.Model(&model.PersonalAccessToken{}).
+			Where("user_id = ? AND name = ?", u.ID, "migrated").
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("failed to check existing PAT: %w", err)
+		}
+		if count > 0 {
+			continue
+		}
+		prefix := u.AccessToken
+		if len(prefix) > 8 {
+			prefix = prefix[:8]
+		}
+		pat := model.PersonalAccessToken{
+			UserID:    u.ID,
+			Name:      "migrated",
+			Prefix:    prefix,
+			TokenHash: sha256Hex(u.AccessToken),
+		}
+		if err := db.Create(&pat).Error; err != nil {
+			return fmt.Errorf("failed to migrate token for user %s: %w", u.Username, err)
+		}
+	}
+	return nil
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

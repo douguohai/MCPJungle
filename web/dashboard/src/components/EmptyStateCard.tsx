@@ -1,24 +1,29 @@
-import { CopyButton } from "./CopyButton";
-import type { DashboardEmptyState } from "@/lib/types";
+import { Card, Empty, Typography } from "antd";
+import type { DashboardEmptyState } from "../types";
 
-export function EmptyStateCard({ emptyState }: { emptyState: DashboardEmptyState }) {
+export default function EmptyStateCard({ state }: { state?: DashboardEmptyState }) {
+  if (!state) return null;
   return (
-    <section className="panel empty-state">
-      <div>
-        <p className="panel-label">Empty state</p>
-        <h3>{emptyState.title}</h3>
-        <p>{emptyState.description}</p>
-      </div>
-      {emptyState.commands && emptyState.commands.length > 0 ? (
-        <div className="command-list">
-          {emptyState.commands.map((command) => (
-            <div className="command-chip" key={command}>
-              <code>{command}</code>
-              <CopyButton ariaLabel="Copy command" title="Copy command" value={command} />
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
+    <Card>
+      <Empty
+        description={
+          <>
+            <Typography.Text strong>{state.title}</Typography.Text>
+            <br />
+            <Typography.Text type="secondary">{state.description}</Typography.Text>
+          </>
+        }
+      >
+        {state.commands && state.commands.length > 0 && (
+          <div style={{ marginTop: 16, textAlign: "left" }}>
+            {state.commands.map((c) => (
+              <Typography.Paragraph key={c} code copyable style={{ marginBottom: 4 }}>
+                {c}
+              </Typography.Paragraph>
+            ))}
+          </div>
+        )}
+      </Empty>
+    </Card>
   );
 }

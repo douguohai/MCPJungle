@@ -4,11 +4,13 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
@@ -49,6 +51,9 @@ type ServerOptions struct {
 
 	OtelProviders *telemetry.Providers
 	Metrics       telemetry.CustomMetrics
+
+	// AuthSigner signs and verifies user session JWTs.
+	AuthSigner *auth.Signer
 }
 
 // Server represents the MCPJungle registry server that handles MCP proxy and API requests
@@ -68,6 +73,8 @@ type Server struct {
 
 	otelProviders *telemetry.Providers
 	metrics       telemetry.CustomMetrics
+
+	authSigner *auth.Signer
 
 	// groupMcpServers keeps track of mcp-go's server.SSEServer instances created for each tool group.
 	// These instances serve the requests made to tool groups' SSE tools.
@@ -108,6 +115,7 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		dashboardService:      opts.DashboardService,
 		otelProviders:         opts.OtelProviders,
 		metrics:               opts.Metrics,
+		authSigner:            opts.AuthSigner,
 		dashboardOAuthResults: make(map[string]dashboardOAuthSessionResult),
 	}
 
@@ -206,6 +214,33 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		r.GET("/", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
 		r.GET("/index.html", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
 		r.GET("/assets/*filepath", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
+
+		// SPA fallback: serve index.html for any unknown non-API route so that
+		// client-side routes (e.g. /servers) survive a hard refresh. API and MCP
+		// paths still return a proper 404 JSON.
+		r.NoRoute(func(c *gin.Context) {
+			p := c.Request.URL.Path
+			if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/v0/") ||
+				strings.HasPrefix(p, "/mcp") || strings.HasPrefix(p, "/sse") ||
+				strings.HasPrefix(p, "/message") || strings.HasPrefix(p, "/health") ||
+				strings.HasPrefix(p, "/metrics") || strings.HasPrefix(p, "/metadata") ||
+				strings.HasPrefix(p, "/init") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			cfg, err := s.configService.GetConfig()
+			if err != nil || !cfg.Initialized {
+				c.JSON(http.StatusForbidden, gin.H{"error": "server is not initialized"})
+				return
+			}
+			if cfg.Mode != model.ModeDev && !model.IsEnterpriseMode(cfg.Mode) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			// Rewrite to "/" so the embedded file server returns index.html.
+			c.Request.URL.Path = "/"
+			dashboardFileServer.ServeHTTP(c.Writer, c.Request)
+		})
 	}
 
 	// Set up the MCP proxy server on /mcp
@@ -353,29 +388,58 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	}
 
 	if s.dashboardService != nil {
-		dashboardAPI := r.Group(
+		// Public dashboard endpoints: reachable without a user token so the login
+		// page can verify credentials before the user is authenticated.
+		dashboardPublicAPI := r.Group(
 			"/api/dashboard",
 			s.requireInitialized(),
 			requireDashboardMode,
 		)
 		{
+			dashboardPublicAPI.POST("/auth/verify", s.dashboardVerifyTokenHandler())
+			dashboardPublicAPI.POST("/auth/login", s.dashboardLoginHandler())
+		}
+
+		// Protected dashboard endpoints: require a valid user access token in
+		// enterprise mode (development mode is auto-allowed by the middleware).
+		dashboardAPI := r.Group(
+			"/api/dashboard",
+			s.requireInitialized(),
+			requireDashboardMode,
+			s.verifyUserAuthForAPIAccess(),
+		)
+		{
+			// Read endpoints: accessible to any authenticated dashboard user.
 			dashboardAPI.GET("/overview", s.dashboardOverviewHandler())
 			dashboardAPI.GET("/servers", s.dashboardServersHandler())
-			dashboardAPI.POST("/servers", s.dashboardRegisterServerHandler())
 			dashboardAPI.GET("/oauth/callback", s.dashboardOAuthCallbackHandler())
 			dashboardAPI.GET("/oauth/session/:id", s.dashboardOAuthSessionHandler())
-			dashboardAPI.DELETE("/servers/:name", s.dashboardDeleteServerHandler())
-			dashboardAPI.PATCH("/servers/:name/enabled", s.dashboardSetServerEnabledHandler())
 			dashboardAPI.GET("/tools", s.dashboardToolsHandler())
-			dashboardAPI.PATCH("/tools/:name/enabled", s.dashboardSetToolEnabledHandler())
 			dashboardAPI.GET("/tool-groups", s.dashboardToolGroupsHandler())
-			dashboardAPI.POST("/tool-groups", s.dashboardCreateToolGroupHandler())
 			dashboardAPI.GET("/tool-groups/:name", s.dashboardGetToolGroupHandler())
-			dashboardAPI.DELETE("/tool-groups/:name", s.dashboardDeleteToolGroupHandler())
 			dashboardAPI.GET("/prompts", s.dashboardPromptsHandler())
-			dashboardAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
 			dashboardAPI.GET("/resources", s.dashboardResourcesHandler())
 			dashboardAPI.GET("/diagnostics", s.dashboardDiagnosticsHandler())
+
+			// Personal access tokens: any authenticated user manages their own.
+			dashboardAPI.GET("/tokens", s.dashboardListTokensHandler())
+			dashboardAPI.POST("/tokens", s.dashboardCreateTokenHandler())
+			dashboardAPI.DELETE("/tokens/:id", s.dashboardDeleteTokenHandler())
+		}
+
+		// Mutation endpoints: restricted to admin users in enterprise mode, mirroring
+		// the requireAdminUser guard applied to the equivalent /v0 admin API routes.
+		// Without this, any authenticated user could delete servers or manage tool
+		// groups via the dashboard API while the same action is forbidden via /v0.
+		dashboardAdminAPI := dashboardAPI.Group("/", s.requireAdminUser())
+		{
+			dashboardAdminAPI.POST("/servers", s.dashboardRegisterServerHandler())
+			dashboardAdminAPI.DELETE("/servers/:name", s.dashboardDeleteServerHandler())
+			dashboardAdminAPI.PATCH("/servers/:name/enabled", s.dashboardSetServerEnabledHandler())
+			dashboardAdminAPI.PATCH("/tools/:name/enabled", s.dashboardSetToolEnabledHandler())
+			dashboardAdminAPI.POST("/tool-groups", s.dashboardCreateToolGroupHandler())
+			dashboardAdminAPI.DELETE("/tool-groups/:name", s.dashboardDeleteToolGroupHandler())
+			dashboardAdminAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
 		}
 	}
 

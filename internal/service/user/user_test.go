@@ -58,14 +58,17 @@ func TestCreateAdminUser(t *testing.T) {
 	setup, _ := testhelpers.SetupUserTest(t)
 	defer setup.Cleanup()
 	svc := NewUserService(setup.DB)
-	user, err := svc.CreateAdminUser()
+	user, err := svc.CreateAdminUser("admin", "test-password-123")
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertNotNil(t, user)
 	// Verify admin user properties
 	testhelpers.AssertEqual(t, "admin", user.Username)
 	testhelpers.AssertEqual(t, types.UserRoleAdmin, user.Role)
-	if user.AccessToken == "" {
-		t.Error("Expected access token to be generated")
+	if user.PasswordHash == "" {
+		t.Error("Expected password hash to be set")
+	}
+	if user.AccessToken != "" {
+		t.Error("Expected admin to have no legacy access token")
 	}
 }
 
@@ -188,13 +191,13 @@ func TestDeleteAdminUser(t *testing.T) {
 	defer setup.Cleanup()
 	svc := NewUserService(setup.DB)
 	// Create admin user
-	admin, _ := svc.CreateAdminUser()
+	_, _ = svc.CreateAdminUser("admin", "test-password-123")
 	// Try to delete admin user (should fail)
 	err := svc.DeleteUser("admin")
 	testhelpers.AssertError(t, err)
 	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrInvalidInput), "expected ErrInvalidInput")
 	// Verify admin user still exists
-	retrievedUser, _ := svc.GetUserByAccessToken(admin.AccessToken)
+	retrievedUser, _ := svc.GetUserByUsername("admin")
 	testhelpers.AssertEqual(t, "admin", retrievedUser.Username)
 }
 

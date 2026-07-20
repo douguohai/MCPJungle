@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"gorm.io/gorm"
 )
 
 // requireInitialized is middleware to reject requests to certain routes if the server is not initialized
@@ -25,8 +27,9 @@ func (s *Server) requireInitialized() gin.HandlerFunc {
 	}
 }
 
-// requireDashboardMode returns 404 if mcpjungle server is not running in development mode.
-// It is mainly used for frontend routes, since frontend is currently only allowed in dev mode.
+// requireDashboardMode allows dashboard access in development and enterprise modes,
+// returning 404 for any other mode. It guards both the embedded frontend routes and
+// the /api/dashboard endpoints.
 func (s *Server) requireDashboardMode() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -39,7 +42,7 @@ func (s *Server) requireDashboardMode() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid server mode in context"})
 			return
 		}
-		if currentMode != model.ModeDev {
+		if currentMode != model.ModeDev && !model.IsEnterpriseMode(currentMode) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
@@ -47,8 +50,11 @@ func (s *Server) requireDashboardMode() gin.HandlerFunc {
 	}
 }
 
-// verifyUserAuthForAPIAccess is middleware that checks for a valid user token if the server is in enterprise mode.
-// this middleware doesn't care about the role of the user, it just verifies that they're authenticated.
+// verifyUserAuthForAPIAccess is middleware that authenticates a request in
+// enterprise mode. It accepts either a short-lived session JWT (issued by the
+// dashboard login) or, during the migration, a legacy long-lived access token.
+// Dev mode is always allowed. This middleware does not check the user's role;
+// requireAdminUser does that.
 func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -62,7 +68,7 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 		if m == model.ModeDev {
-			// no auth is required in case of dev mode
+			// no auth is required in dev mode
 			c.Next()
 			return
 		}
@@ -74,17 +80,51 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 
-		// Verify that the token is valid and corresponds to a user
-		authenticatedUser, err := s.userService.GetUserByAccessToken(token)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token: " + err.Error()})
+		// Prefer a session JWT (human dashboard login).
+		if user, ok := s.userFromJWT(token); ok {
+			c.Set("user", user)
+			c.Next()
 			return
 		}
 
-		// Store user in context for potential role checks in subsequent handlers
-		c.Set("user", authenticatedUser)
-		c.Next()
+		// A personal access token (long-lived API key for CLI/automation).
+		if user, err := s.userService.GetUserByPAT(token); err == nil {
+			c.Set("user", user)
+			c.Next()
+			return
+		}
+
+		// Fall back to a legacy long-lived access token during the migration.
+		if user, err := s.userService.GetUserByAccessToken(token); err == nil {
+			c.Set("user", user)
+			c.Next()
+			return
+		}
+
+		// Fixed message — never echo internal errors to unauthenticated callers.
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 	}
+}
+
+// userFromJWT parses a session JWT and reconstructs the user from its claims
+// without a DB lookup. Returns (nil, false) if the token is not a valid JWT.
+func (s *Server) userFromJWT(token string) (*model.User, bool) {
+	if s.authSigner == nil {
+		return nil, false
+	}
+	claims, err := s.authSigner.Parse(token)
+	if err != nil {
+		return nil, false
+	}
+	uid, err := strconv.ParseUint(claims.Subject, 10, 64)
+	if err != nil {
+		return nil, false
+	}
+	return &model.User{
+		Model:    gorm.Model{ID: uint(uid)},
+		Username: claims.Username,
+		Role:     types.UserRole(claims.Role),
+	}, true
 }
 
 // requireAdminUser is middleware that ensures the authenticated user has an admin role when in enterprise mode.

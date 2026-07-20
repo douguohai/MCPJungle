@@ -168,7 +168,11 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 	case model.ModeEnterprise:
 		_, err = cfgSvc.Init(model.ModeEnterprise)
 		require.NoError(t, err)
-		adminUser, err := usrSvc.CreateAdminUser()
+		_, err = usrSvc.CreateAdminUser("admin", "test-password")
+		require.NoError(t, err)
+		// e2e drives the legacy access-token fallback path of the auth
+		// middleware; assign a known token to the admin for that purpose.
+		adminUser, err := usrSvc.UpdateUser(&model.User{Username: "admin", AccessToken: "e2e-admin-token-123"})
 		require.NoError(t, err)
 		env.adminToken = adminUser.AccessToken
 		regularUser, err := usrSvc.CreateUser(&model.User{Username: "regularuser"})

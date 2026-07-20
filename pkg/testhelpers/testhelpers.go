@@ -265,6 +265,7 @@ func SetupTestDB(t *testing.T) *TestDBSetup {
 		&model.Resource{},
 		&model.UpstreamOAuthPendingSession{},
 		&model.UpstreamOAuthToken{},
+		&model.PersonalAccessToken{},
 	)
 	AssertNoError(t, err)
 
