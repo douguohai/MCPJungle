@@ -96,32 +96,37 @@ export default function DeviceTokensPage() {
   };
 
   const columns: ColumnsType<DeviceToken> = [
-    { title: "设备名称", dataIndex: "name" },
+    { title: "设备名称", dataIndex: "name", width: 200, ellipsis: true },
     {
       title: "令牌前缀",
       dataIndex: "token_prefix",
+      width: 150,
       render: (prefix: string) => <Typography.Text code>{prefix}…</Typography.Text>,
     },
     {
       title: "权限范围",
       dataIndex: "scope",
+      width: 160,
       render: (value: DeviceTokenScope) =>
         value === "inherit_all" ? "继承当前全部权限" : "仅指定服务",
     },
     {
       title: "有效期至",
       dataIndex: "expires_at",
+      width: 180,
       render: (value: string) => new Date(value).toLocaleString("zh-CN"),
     },
     {
       title: "最近使用",
       dataIndex: "last_used_at",
+      width: 180,
       render: (value?: string) =>
         value ? new Date(value).toLocaleString("zh-CN") : "尚未使用",
     },
     {
       title: "状态",
       key: "status",
+      width: 90,
       render: (_, token) =>
         token.revoked_at ? (
           <Tag>已吊销</Tag>
@@ -134,6 +139,8 @@ export default function DeviceTokensPage() {
     {
       title: "操作",
       key: "actions",
+      width: 90,
+      fixed: "right",
       render: (_, token) =>
         token.revoked_at ? null : (
           <Popconfirm title={`确认吊销 ${token.name}？`} onConfirm={() => void revoke(token)}>
@@ -163,7 +170,14 @@ export default function DeviceTokensPage() {
           设备令牌用于 MCP 客户端连接，不用于登录管理后台。令牌明文只在创建成功时展示一次。
         </Typography.Paragraph>
         {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
-        <Table rowKey="ID" dataSource={tokens} columns={columns} loading={loading} pagination={{ pageSize: 20 }} />
+        <Table
+          rowKey="ID"
+          dataSource={tokens}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+          scroll={{ x: 1050 }}
+        />
       </Card>
 
       <Modal

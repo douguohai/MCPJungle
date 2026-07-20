@@ -63,13 +63,20 @@ export default function ServersPage() {
     {
       title: "名称",
       dataIndex: "name",
-      render: (name: string) => <Link to={`/servers/${encodeURIComponent(name)}`}>{name}</Link>,
+      width: 160,
+      ellipsis: true,
+      render: (name: string) => (
+        <Link to={`/servers/${encodeURIComponent(name)}`} title={name}>
+          {name}
+        </Link>
+      ),
     },
-    { title: "传输", dataIndex: "transport", render: (t: string) => <TransportTag transport={t} /> },
-    { title: "状态", dataIndex: "status", render: (s: string) => <StatusBadge status={s} /> },
+    { title: "传输", dataIndex: "transport", width: 100, render: (t: string) => <TransportTag transport={t} /> },
+    { title: "状态", dataIndex: "status", width: 90, render: (s: string) => <StatusBadge status={s} /> },
     {
       title: "启用",
       dataIndex: "enabled",
+      width: 80,
       render: (enabled: boolean, row) => (
         <Switch
           checked={enabled}
@@ -85,6 +92,7 @@ export default function ServersPage() {
     {
       title: "配置摘要",
       dataIndex: "connection_summary",
+      width: 220,
       ellipsis: true,
       render: (s: string, row) => (
         <Tooltip title={row.config_summary?.sanitized_summary ?? s}>
@@ -95,6 +103,8 @@ export default function ServersPage() {
     {
       title: "操作",
       key: "actions",
+      width: 190,
+      fixed: "right",
       render: (_, row) => (
         <span style={{ display: "flex", gap: 8 }}>
           <Link to={`/servers/${encodeURIComponent(row.name)}`}>
@@ -143,6 +153,7 @@ export default function ServersPage() {
         columns={columns}
         loading={loading}
         pagination={{ pageSize: 20 }}
+        scroll={{ x: 1100 }}
       />
       <ServerForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={load} />
     </Card>
