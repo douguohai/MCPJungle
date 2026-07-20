@@ -419,6 +419,9 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			dashboardAdminAPI.POST("/tool-groups", s.dashboardCreateToolGroupHandler())
 			dashboardAdminAPI.DELETE("/tool-groups/:name", s.dashboardDeleteToolGroupHandler())
 			dashboardAdminAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
+
+			// Analytics: per-user per-server call counts (admin only).
+			dashboardAdminAPI.GET("/stats", s.dashboardCallStatsHandler())
 		}
 	}
 

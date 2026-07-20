@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"gorm.io/gorm"
 )
 
 func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
@@ -31,6 +33,26 @@ func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
 	return nil
 }
 
+// recordUserCall increments the calling user's per-server call counter. Only the
+// count is stored. Best-effort: errors are ignored so analytics never breaks a
+// tool call.
+func (m *MCPService) recordUserCall(ctx context.Context, serverName string) {
+	c, ok := ctx.Value("client").(*model.McpClient)
+	if !ok || c == nil || c.UserID == 0 {
+		return // dev mode or client without an owner user
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	var stat model.UserCallStat
+	err := m.db.Where("user_id = ? AND server_name = ? AND date = ?", c.UserID, serverName, today).First(&stat).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		_ = m.db.Create(&model.UserCallStat{UserID: c.UserID, ServerName: serverName, Date: today, Count: 1}).Error
+		return
+	}
+	if err == nil {
+		_ = m.db.Model(&stat).Update("count", gorm.Expr("count + 1")).Error
+	}
+}
+
 // MCPProxyToolCallHandler handles tool calls for the MCP proxy server
 // by forwarding the request to the appropriate upstream MCP server and
 // relaying the response back.
@@ -47,6 +69,9 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	if err := authorizeProxyServerAccess(ctx, serverName); err != nil {
 		return nil, err
 	}
+
+	// Record per-user call count for analytics (only the count, never content).
+	m.recordUserCall(ctx, serverName)
 
 	// Record the tool call metrics at the end of the function
 	defer func() {

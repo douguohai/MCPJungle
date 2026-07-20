@@ -224,3 +224,14 @@ export interface UserListItem {
   role: string;
   allowed_servers?: string[] | null;
 }
+
+export interface CallStat {
+  username: string;
+  server_name: string;
+  date: string;
+  count: number;
+}
+
+export interface CallStatsResponse {
+  stats: CallStat[];
+}

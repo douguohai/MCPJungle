@@ -14,6 +14,7 @@ import {
   MenuUnfoldOutlined,
   DesktopOutlined,
   TeamOutlined,
+  BarChartOutlined,
 } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { clearToken, getUser } from "../store/auth";
@@ -36,6 +37,7 @@ const baseMenuItems = [
 const adminMenuItems = [
   { key: "/clients", icon: <DesktopOutlined />, label: "MCP 客户端" },
   { key: "/users", icon: <TeamOutlined />, label: "用户" },
+  { key: "/stats", icon: <BarChartOutlined />, label: "调用统计" },
 ];
 
 export default function DashboardLayout() {

@@ -23,6 +23,7 @@ func Migrate(db *gorm.DB) error {
 		&model.Resource{},
 		&model.UpstreamOAuthPendingSession{},
 		&model.UpstreamOAuthToken{},
+		&model.UserCallStat{},
 	} {
 		if err := db.AutoMigrate(m); err != nil {
 			return fmt.Errorf("auto-migration failed for %T: %v", m, err)

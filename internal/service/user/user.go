@@ -208,3 +208,26 @@ func (u *UserService) DeleteUser(username string) error {
 	}
 	return nil
 }
+
+// UserCallStatView is one row of per-user per-server call counts for the stats page.
+type UserCallStatView struct {
+	Username   string `json:"username"`
+	ServerName string `json:"server_name"`
+	Date       string `json:"date"`
+	Count      uint64 `json:"count"`
+}
+
+// ListCallStats returns per-user per-server per-day MCP call counts, joined with usernames.
+func (u *UserService) ListCallStats() ([]UserCallStatView, error) {
+	var rows []UserCallStatView
+	err := u.db.Table("user_call_stats").
+		Select("users.username AS username, user_call_stats.server_name AS server_name, user_call_stats.date AS date, user_call_stats.count AS count").
+		Joins("LEFT JOIN users ON users.id = user_call_stats.user_id").
+		Where("users.deleted_at IS NULL").
+		Order("user_call_stats.date DESC, users.username, user_call_stats.server_name").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to load call stats: %w", err)
+	}
+	return rows, nil
+}
