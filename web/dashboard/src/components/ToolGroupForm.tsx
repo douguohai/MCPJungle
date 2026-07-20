@@ -8,17 +8,21 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
-  // available tools, used to populate the multi-select options
   tools: DashboardTool[];
+  initialTools?: string[];
 }
 
-export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props) {
+export default function ToolGroupForm({ open, onClose, onCreated, tools, initialTools = [] }: Props) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (initialTools.length > 0) {
+      form.setFieldValue("tools", initialTools);
+    }
+  }, [open, form, initialTools]);
 
   const options = tools.map((t) => ({ label: t.canonical_name, value: t.canonical_name }));
 

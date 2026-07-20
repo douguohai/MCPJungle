@@ -9,6 +9,7 @@ import OverviewPage from "./pages/OverviewPage";
 import ServersPage from "./pages/ServersPage";
 import ToolGroupsPage from "./pages/ToolGroupsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import TutorialPage from "./pages/TutorialPage";
 import UsersPage from "./pages/UsersPage";
 import StatsPage from "./pages/StatsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="servers" element={<ServersPage />} />
         <Route path="servers/:serverName" element={<ServerDetailPage />} />
         <Route path="device-tokens" element={<DeviceTokensPage />} />
+        <Route path="tutorial" element={<TutorialPage />} />
         <Route
           path="users"
           element={

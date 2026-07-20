@@ -119,7 +119,16 @@ export default function ServerDetailPage() {
 
   const toolColumns = useMemo<ColumnsType<DashboardTool>>(
     () => [
-      { title: "名称", dataIndex: "name" },
+      {
+        title: "名称",
+        dataIndex: "name",
+        render: (name: string, row) => (
+          <Space size={8}>
+            <Typography.Text>{name}</Typography.Text>
+            <CopyButton text={row.canonical_name} />
+          </Space>
+        ),
+      },
       { title: "描述", dataIndex: "description", ellipsis: true },
       {
         title: "注解",
@@ -143,8 +152,17 @@ export default function ServerDetailPage() {
       },
       {
         title: "操作",
-        width: 100,
-        render: (_, row) => <Button onClick={() => setToolDetail(row)}>查看输入</Button>,
+        width: 200,
+        render: (_, row) => (
+          <Space size={8}>
+            <Button onClick={() => setToolDetail(row)}>查看输入</Button>
+            {canManage && (
+              <Link to={`/settings/ability-combinations?tools=${encodeURIComponent(row.canonical_name)}`}>
+                <Button>加入组合</Button>
+              </Link>
+            )}
+          </Space>
+        ),
       },
     ],
     [canManage, toggling],
@@ -152,7 +170,16 @@ export default function ServerDetailPage() {
 
   const promptColumns = useMemo<ColumnsType<DashboardPrompt>>(
     () => [
-      { title: "名称", dataIndex: "name" },
+      {
+        title: "名称",
+        dataIndex: "name",
+        render: (name: string, row) => (
+          <Space size={8}>
+            <Typography.Text>{name}</Typography.Text>
+            <CopyButton text={row.canonical_name} />
+          </Space>
+        ),
+      },
       { title: "描述", dataIndex: "description", ellipsis: true },
       {
         title: "启用",
@@ -232,7 +259,16 @@ export default function ServerDetailPage() {
     {
       key: "tools",
       label: `工具 ${tools.length}`,
-      children: tools.length ? <Table rowKey="canonical_name" columns={toolColumns} dataSource={tools} pagination={{ pageSize: 20 }} /> : <CapabilityEmpty label="工具" />,
+      children: tools.length ? (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          {canManage && (
+            <Link to={`/settings/ability-combinations?server=${encodeURIComponent(server.name)}`}>
+              <Button>用该服务工具创建能力组合</Button>
+            </Link>
+          )}
+          <Table rowKey="canonical_name" columns={toolColumns} dataSource={tools} pagination={{ pageSize: 20 }} />
+        </Space>
+      ) : <CapabilityEmpty label="工具" />,
     },
     {
       key: "prompts",
@@ -289,4 +325,3 @@ export default function ServerDetailPage() {
     </div>
   );
 }
-

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { PlusOutlined } from "@ant-design/icons";
+import { useSearchParams } from "react-router-dom";
 import { toolGroupsApi } from "../api/toolGroups";
 import { toolsApi } from "../api/tools";
 import { extractError } from "../api/client";
@@ -16,6 +17,7 @@ import ToolGroupForm from "../components/ToolGroupForm";
 import { useAuth } from "../store/auth";
 
 export default function ToolGroupsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const canManage = user?.role === "system_admin";
   const [data, setData] = useState<DashboardToolGroupsResponse | null>(null);
@@ -38,6 +40,27 @@ export default function ToolGroupsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const initialTools = toolsData
+    .filter((tool) => {
+      const selectedTools = searchParams.get("tools")?.split(",").filter(Boolean) ?? [];
+      const selectedServer = searchParams.get("server");
+      return selectedTools.includes(tool.canonical_name) || (!!selectedServer && tool.server === selectedServer);
+    })
+    .map((tool) => tool.canonical_name);
+
+  useEffect(() => {
+    if (canManage && toolsData.length > 0 && initialTools.length > 0) {
+      setFormOpen(true);
+    }
+  }, [canManage, toolsData.length, initialTools.length]);
+
+  const closeForm = () => {
+    setFormOpen(false);
+    if (searchParams.has("tools") || searchParams.has("server")) {
+      setSearchParams({});
+    }
+  };
 
   if (loading && !data) return <Spin />;
   if (error) return <Alert type="error" message={error} />;
@@ -105,9 +128,10 @@ export default function ToolGroupsPage() {
         />
         <ToolGroupForm
           open={formOpen}
-          onClose={() => setFormOpen(false)}
+          onClose={closeForm}
           onCreated={load}
           tools={toolsData}
+          initialTools={initialTools}
         />
       </>
     );
@@ -127,9 +151,10 @@ export default function ToolGroupsPage() {
       />
       <ToolGroupForm
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={closeForm}
         onCreated={load}
         tools={toolsData}
+        initialTools={initialTools}
       />
       <Drawer title={detail?.name} open={!!detail} onClose={() => setDetail(null)} width={480}>
         <List

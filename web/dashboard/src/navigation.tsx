@@ -4,6 +4,7 @@ import {
   CloudServerOutlined,
   DashboardOutlined,
   DesktopOutlined,
+  ReadOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   TeamOutlined,
@@ -26,6 +27,7 @@ export function buildMenuItems(role?: UserRole): MenuItem[] {
     ]),
     group("personal", "个人接入", [
       { key: "/device-tokens", icon: <DesktopOutlined />, label: "我的设备令牌" },
+      { key: "/tutorial", icon: <ReadOutlined />, label: "使用教程" },
     ]),
   ];
 
@@ -66,4 +68,3 @@ export function selectedMenuKey(pathname: string): string {
   if (pathname.startsWith("/settings/")) return "/settings";
   return pathname;
 }
-

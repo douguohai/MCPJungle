@@ -46,22 +46,22 @@ export default function OverviewPage() {
       <Alert showIcon type={statusType} message={statusText} style={{ marginBottom: 16 }} />
       <Row gutter={16}>
         <Col span={6}>
-          <Card>
+          <Card extra={<Link to="/servers">查看</Link>}>
             <Statistic title="MCP 服务" value={data.server_count} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card extra={<Link to="/servers">查看</Link>}>
             <Statistic title="工具" value={data.tool_count} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card extra={<Link to="/servers">查看</Link>}>
             <Statistic title="提示模板" value={data.prompt_count} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card extra={<Link to="/servers">查看</Link>}>
             <Statistic title="数据资源" value={data.resource_count} />
           </Card>
         </Col>
