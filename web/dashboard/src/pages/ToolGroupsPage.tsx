@@ -99,7 +99,7 @@ export default function ToolGroupsPage() {
           state={data.empty_state}
           action={canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-              创建第一个工具组
+              创建第一个能力组合
             </Button>
           ) : undefined}
         />
@@ -114,9 +114,9 @@ export default function ToolGroupsPage() {
   }
 
   return (
-    <Card title="工具组" extra={addButton}>
+    <Card title="能力组合" extra={addButton}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        工具组把来自不同 MCP 服务器的多个工具打包成一个虚拟服务，提供独立的调用端点，方便按场景分发给 AI 客户端。
+        能力组合把多个 MCP 工具编排为一个独立调用端点，适合按业务场景交付给 AI 客户端。人员访问范围仍由权限组控制。
       </Typography.Paragraph>
       <Table
         rowKey="name"

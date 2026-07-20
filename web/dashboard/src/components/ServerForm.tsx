@@ -88,7 +88,7 @@ export default function ServerForm({ open, onClose, onCreated }: Props) {
           "该上游需要 OAuth 授权，请通过 CLI 完成注册流程。",
         );
       } else {
-        message.success(`已添加服务器 ${res.name ?? body.name}`);
+        message.success(`已添加 MCP 服务 ${res.name ?? body.name}`);
       }
       onCreated();
       onClose();
@@ -101,7 +101,7 @@ export default function ServerForm({ open, onClose, onCreated }: Props) {
 
   return (
     <Modal
-      title="添加 MCP 服务器"
+      title="添加 MCP 服务"
       open={open}
       onCancel={onClose}
       onOk={onSubmit}
@@ -119,8 +119,8 @@ export default function ServerForm({ open, onClose, onCreated }: Props) {
         <Form.Item
           name="name"
           label="名称"
-          tooltip="服务器的唯一标识（注册后不可更改）。AI 客户端通过它引用此服务。"
-          rules={[{ required: true, message: "请输入服务器名称" }]}
+          tooltip="服务的唯一标识（添加后不可更改）。AI 客户端通过它引用此服务。"
+          rules={[{ required: true, message: "请输入服务名称" }]}
         >
           <Input placeholder="例如 context7、filesystem" />
         </Form.Item>

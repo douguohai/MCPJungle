@@ -11,6 +11,70 @@ body {
     "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
+.dashboard-brand {
+  height: 64px;
+  padding: 14px 24px;
+  box-sizing: border-box;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.dashboard-brand small {
+  display: block;
+  color: #8ea6bf;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.dashboard-brand.collapsed {
+  padding-inline: 0;
+  text-align: center;
+}
+
+.ant-menu-dark .ant-menu-item-group-title {
+  padding-top: 18px;
+  color: #6f879f;
+  font-size: 11px;
+}
+
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.service-detail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.service-tabs-card .ant-card-body {
+  padding-top: 8px;
+}
+
+.settings-link {
+  display: block;
+  color: inherit;
+}
+
+.settings-card,
+.settings-card .ant-space {
+  width: 100%;
+}
+
+.settings-card .ant-space-item:nth-child(2) {
+  flex: 1;
+}
+
+.settings-arrow {
+  margin-top: 8px;
+  color: #bfbfbf;
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;

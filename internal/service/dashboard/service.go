@@ -138,8 +138,8 @@ func (s *Service) Tools() (*types.DashboardToolsResponse, error) {
 	}
 	if len(resp.Tools) == 0 {
 		resp.EmptyState = emptyState(
-			"No tools discovered yet",
-			"MCPJungle is running, but it has not discovered any tools from registered servers yet.",
+			"还没有可用工具",
+			"已添加的 MCP 服务尚未发现工具，请进入具体服务查看连接状态。",
 			[]string{
 				"mcpjungle list tools --server context7",
 				"mcpjungle usage <tool-name>",
@@ -176,8 +176,8 @@ func (s *Service) Prompts() (*types.DashboardPromptsResponse, error) {
 	}
 	if len(resp.Prompts) == 0 {
 		resp.EmptyState = emptyState(
-			"No prompts discovered yet",
-			"Registered servers can expose prompt templates. None are currently available.",
+			"还没有提示模板",
+			"已添加的 MCP 服务尚未提供提示模板。",
 			[]string{
 				"mcpjungle list prompts",
 				"mcpjungle get prompt <prompt-name>",
@@ -210,8 +210,8 @@ func (s *Service) Resources() (*types.DashboardResourcesResponse, error) {
 	}
 	if len(resp.Resources) == 0 {
 		resp.EmptyState = emptyState(
-			"No resources discovered yet",
-			"Registered servers can expose MCP resources. None are currently available.",
+			"还没有数据资源",
+			"已添加的 MCP 服务尚未提供可读取的数据资源。",
 			[]string{
 				"mcpjungle list resources",
 				"mcpjungle get resource --read <uri>",
@@ -496,15 +496,15 @@ func buildEndpoints(baseURL string) []types.DashboardEndpoint {
 func collectTroubleshootingHints(inventory []serverInventory, toolCount, promptCount, resourceCount int) []string {
 	hints := []string{}
 	if len(inventory) == 0 {
-		hints = append(hints, "No servers registered yet")
+		hints = append(hints, "尚未添加 MCP 服务")
 	}
 	if len(inventory) > 0 && toolCount == 0 {
-		hints = append(hints, "Server registered but no tools discovered")
+		hints = append(hints, "已有 MCP 服务，但尚未发现工具")
 	}
 	if len(inventory) > 0 && (promptCount == 0 || resourceCount == 0) {
-		hints = append(hints, "Prompt/resource discovery failed")
+		hints = append(hints, "提示模板或数据资源尚未完成发现")
 	}
-	hints = append(hints, "Check CLI logs for detailed errors")
+	hints = append(hints, "如连接异常，请检查服务地址、认证信息和运行日志")
 	return hints
 }
 
@@ -519,8 +519,8 @@ func hasDiscoveryGap(inventory []serverInventory) bool {
 
 func noServersEmptyState() *types.DashboardEmptyState {
 	return emptyState(
-		"No servers registered yet",
-		"Register an MCP server from the CLI, then refresh the dashboard to inspect tools, prompts, and resources.",
+		"还没有 MCP 服务",
+		"添加一个 MCP 服务后，即可查看它提供的工具、提示模板和数据资源。",
 		[]string{
 			"mcpjungle register --name context7 --url https://mcp.context7.com/mcp",
 			"mcpjungle list servers",

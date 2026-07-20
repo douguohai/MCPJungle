@@ -28,7 +28,7 @@ export default function OverviewPage() {
         state={data.empty_state}
         action={
           <Link to="/servers">
-            <Button type="primary">去注册第一个 MCP 服务器</Button>
+            <Button type="primary">添加第一个 MCP 服务</Button>
           </Link>
         }
       />
@@ -41,13 +41,13 @@ export default function OverviewPage() {
   return (
     <>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        MCPJungle 是一个 MCP 网关：把多个 MCP 服务器的工具、提示词、资源统一聚合，AI 客户端只需连接 MCPJungle 一个端点即可使用全部能力。
+        MCPJungle 统一接入团队内部的 MCP 服务，并按用户和权限组分配访问范围；每次调用都可追溯到具体身份和设备令牌。
       </Typography.Paragraph>
       <Alert showIcon type={statusType} message={statusText} style={{ marginBottom: 16 }} />
       <Row gutter={16}>
         <Col span={6}>
           <Card>
-            <Statistic title="MCP 服务器" value={data.server_count} />
+            <Statistic title="MCP 服务" value={data.server_count} />
           </Card>
         </Col>
         <Col span={6}>
@@ -57,12 +57,12 @@ export default function OverviewPage() {
         </Col>
         <Col span={6}>
           <Card>
-            <Statistic title="提示词" value={data.prompt_count} />
+            <Statistic title="提示模板" value={data.prompt_count} />
           </Card>
         </Col>
         <Col span={6}>
           <Card>
-            <Statistic title="资源" value={data.resource_count} />
+            <Statistic title="数据资源" value={data.resource_count} />
           </Card>
         </Col>
       </Row>

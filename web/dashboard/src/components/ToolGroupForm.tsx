@@ -36,7 +36,7 @@ export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props
         description: (values.description as string) || undefined,
         tools: (values.tools as string[]) ?? [],
       });
-      message.success(`已创建工具组 ${values.name as string}`);
+      message.success(`已创建能力组合 ${values.name as string}`);
       onCreated();
       onClose();
     } catch (e) {
@@ -48,7 +48,7 @@ export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props
 
   return (
     <Modal
-      title="添加工具组"
+      title="添加能力组合"
       open={open}
       onCancel={onClose}
       onOk={onSubmit}

@@ -7,16 +7,15 @@ import { useAuth } from "./store/auth";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
 import ServersPage from "./pages/ServersPage";
-import ToolsPage from "./pages/ToolsPage";
 import ToolGroupsPage from "./pages/ToolGroupsPage";
-import PromptsPage from "./pages/PromptsPage";
-import ResourcesPage from "./pages/ResourcesPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import UsersPage from "./pages/UsersPage";
 import StatsPage from "./pages/StatsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DeviceTokensPage from "./pages/DeviceTokensPage";
 import PermissionGroupsPage from "./pages/PermissionGroupsPage";
+import ServerDetailPage from "./pages/ServerDetailPage";
+import SystemSettingsPage from "./pages/SystemSettingsPage";
 
 export default function App() {
   const { ready } = useAuth();
@@ -56,11 +55,7 @@ export default function App() {
       >
         <Route index element={<OverviewPage />} />
         <Route path="servers" element={<ServersPage />} />
-        <Route path="tools" element={<ToolsPage />} />
-        <Route path="tool-groups" element={<ToolGroupsPage />} />
-        <Route path="prompts" element={<PromptsPage />} />
-        <Route path="resources" element={<ResourcesPage />} />
-        <Route path="diagnostics" element={<DiagnosticsPage />} />
+        <Route path="servers/:serverName" element={<ServerDetailPage />} />
         <Route path="device-tokens" element={<DeviceTokensPage />} />
         <Route
           path="users"
@@ -81,11 +76,14 @@ export default function App() {
         <Route
           path="stats"
           element={
-            <RequireAuth requiredRole="system_admin">
+            <RequireAuth requiredRoles={["system_admin", "auditor"]}>
               <StatsPage />
             </RequireAuth>
           }
         />
+        <Route path="settings" element={<RequireAuth requiredRole="system_admin"><SystemSettingsPage /></RequireAuth>} />
+        <Route path="settings/diagnostics" element={<RequireAuth requiredRole="system_admin"><DiagnosticsPage /></RequireAuth>} />
+        <Route path="settings/ability-combinations" element={<RequireAuth requiredRole="system_admin"><ToolGroupsPage /></RequireAuth>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -36,7 +36,7 @@ export default function StatsPage() {
   const columns: ColumnsType<CallStat> = [
     { title: "日期", dataIndex: "date", width: 120 },
     { title: "用户", dataIndex: "username" },
-    { title: "服务器", dataIndex: "server_name" },
+    { title: "MCP 服务", dataIndex: "server_name" },
     { title: "调用次数", dataIndex: "count", width: 100 },
   ];
 
@@ -71,7 +71,7 @@ export default function StatsPage() {
         </Col>
         <Col span={8}>
           <Card>
-            <Statistic title="被调用的服务器" value={byServer.size} />
+            <Statistic title="被调用的 MCP 服务" value={byServer.size} />
           </Card>
         </Col>
       </Row>
@@ -92,12 +92,12 @@ export default function StatsPage() {
           </Card>
         </Col>
         <Col span={12}>
-          <Card title="按服务器汇总" size="small">
+          <Card title="按 MCP 服务汇总" size="small">
             <Table
               rowKey="server_name"
               dataSource={serverRows}
               columns={[
-                { title: "服务器", dataIndex: "server_name" },
+                { title: "MCP 服务", dataIndex: "server_name" },
                 { title: "调用次数", dataIndex: "count" },
               ]}
               pagination={false}
@@ -116,7 +116,7 @@ export default function StatsPage() {
         }
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          按日记录每位用户对每个 MCP 服务器的工具调用次数（仅次数，不含工具名、参数或结果）。可用于用量观察、报表与后续统计。
+          按日记录每位用户对每个 MCP 服务的工具调用次数（仅次数，不含工具名、参数或结果），用于内部用量观察和审计。
         </Typography.Paragraph>
         <Table
           rowKey={(r) => `${r.date}-${r.username}-${r.server_name}`}

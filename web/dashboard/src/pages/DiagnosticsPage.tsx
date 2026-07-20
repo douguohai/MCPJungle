@@ -24,7 +24,7 @@ export default function DiagnosticsPage() {
   return (
     <>
       <Card>
-        <Descriptions title="诊断信息" column={1}>
+        <Descriptions title="系统运行诊断" column={1}>
           <Descriptions.Item label="版本">{data.version}</Descriptions.Item>
           <Descriptions.Item label="模式">{data.mode}</Descriptions.Item>
           <Descriptions.Item label="数据库">{data.database}</Descriptions.Item>
@@ -43,7 +43,7 @@ export default function DiagnosticsPage() {
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col span={6}>
           <Card>
-            <Statistic title="服务器" value={data.server_count} />
+            <Statistic title="MCP 服务" value={data.server_count} />
           </Card>
         </Col>
         <Col span={6}>
@@ -53,12 +53,12 @@ export default function DiagnosticsPage() {
         </Col>
         <Col span={6}>
           <Card>
-            <Statistic title="提示词" value={data.prompt_count} />
+            <Statistic title="提示模板" value={data.prompt_count} />
           </Card>
         </Col>
         <Col span={6}>
           <Card>
-            <Statistic title="资源" value={data.resource_count} />
+            <Statistic title="数据资源" value={data.resource_count} />
           </Card>
         </Col>
       </Row>

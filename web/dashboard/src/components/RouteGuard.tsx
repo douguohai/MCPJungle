@@ -7,10 +7,12 @@ export default function RequireAuth({
   children,
   allowPasswordChange = false,
   requiredRole,
+  requiredRoles,
 }: {
   children: ReactNode;
   allowPasswordChange?: boolean;
   requiredRole?: UserRole;
+  requiredRoles?: UserRole[];
 }) {
   const location = useLocation();
   const { user } = useAuth();
@@ -21,6 +23,9 @@ export default function RequireAuth({
     return <Navigate to="/change-password" replace />;
   }
   if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+  if (requiredRoles && !requiredRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;

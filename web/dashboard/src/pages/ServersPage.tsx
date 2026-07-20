@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Table, Card, Alert, Spin, Button, Switch, Popconfirm, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { PlusOutlined } from "@ant-design/icons";
+import { EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import { Link } from "react-router-dom";
 import { serversApi } from "../api/servers";
 import { extractError } from "../api/client";
 import type { DashboardServer, DashboardServersResponse } from "../types";
@@ -59,7 +60,11 @@ export default function ServersPage() {
   };
 
   const columns: ColumnsType<DashboardServer> = [
-    { title: "名称", dataIndex: "name" },
+    {
+      title: "名称",
+      dataIndex: "name",
+      render: (name: string) => <Link to={`/servers/${encodeURIComponent(name)}`}>{name}</Link>,
+    },
     { title: "传输", dataIndex: "transport", render: (t: string) => <TransportTag transport={t} /> },
     { title: "状态", dataIndex: "status", render: (s: string) => <StatusBadge status={s} /> },
     {
@@ -75,8 +80,8 @@ export default function ServersPage() {
       ),
     },
     { title: "工具", dataIndex: "tool_count", width: 70 },
-    { title: "提示词", dataIndex: "prompt_count", width: 80 },
-    { title: "资源", dataIndex: "resource_count", width: 70 },
+    { title: "提示模板", dataIndex: "prompt_count", width: 96 },
+    { title: "数据资源", dataIndex: "resource_count", width: 96 },
     {
       title: "配置摘要",
       dataIndex: "connection_summary",
@@ -90,13 +95,18 @@ export default function ServersPage() {
     {
       title: "操作",
       key: "actions",
-      render: (_, row) => canManage ? (
-        <Popconfirm title={`确认删除 ${row.name}？`} onConfirm={() => remove(row.name)}>
-          <Button danger size="small">
-            删除
-          </Button>
-        </Popconfirm>
-      ) : null,
+      render: (_, row) => (
+        <span style={{ display: "flex", gap: 8 }}>
+          <Link to={`/servers/${encodeURIComponent(row.name)}`}>
+            <Button size="small" icon={<EyeOutlined />}>查看详情</Button>
+          </Link>
+          {canManage && (
+            <Popconfirm title={`确认删除 ${row.name}？`} onConfirm={() => remove(row.name)}>
+              <Button danger size="small">删除</Button>
+            </Popconfirm>
+          )}
+        </span>
+      ),
     },
   ];
 
@@ -113,7 +123,7 @@ export default function ServersPage() {
           state={data.empty_state}
           action={canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-              注册第一个 MCP 服务器
+              添加第一个 MCP 服务
             </Button>
           ) : undefined}
         />
@@ -123,9 +133,9 @@ export default function ServersPage() {
   }
 
   return (
-    <Card title="MCP 服务器" extra={addButton}>
+    <Card title="MCP 服务" extra={addButton}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        MCP 服务器是你接入的上游 MCP 服务（在线 HTTP 服务或本地命令行程序）。注册后，MCPJungle 会自动发现并代理它提供的工具、提示词和资源。
+        集中管理内部团队可访问的 MCP 服务。进入服务详情可查看工具、提示模板、数据资源和连接状态。
       </Typography.Paragraph>
       <Table
         rowKey="name"
