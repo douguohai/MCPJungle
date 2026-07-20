@@ -25,6 +25,7 @@ func setupTestDBForProxyAdditional(t *testing.T) *gorm.DB {
 		&model.Tool{},
 		&model.Prompt{},
 		&model.Resource{},
+		&model.UserCallStat{},
 		&model.UpstreamOAuthToken{},
 		&model.UpstreamOAuthPendingSession{},
 	)
@@ -72,11 +73,20 @@ func TestMCPProxyToolCallHandler_RewritesCanonicalNameAndForwardsArguments(t *te
 	req.Params.Name = "tool-server__echo"
 	req.Params.Arguments = map[string]any{"msg": "hello"}
 
-	res, err := service.MCPProxyToolCallHandler(context.WithValue(context.Background(), "mode", model.ModeDev), req)
+	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
+	ctx = WithAccessContext(ctx, AccessContext{
+		UserID: 42, DeviceTokenID: 7,
+		EffectiveServerNames: map[string]struct{}{"tool-server": {}},
+	})
+	res, err := service.MCPProxyToolCallHandler(ctx, req)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, "echo", seenToolName)
 	assert.Equal(t, "hello", seenArgument)
+
+	var stat model.UserCallStat
+	require.NoError(t, db.Where("user_id = ? AND server_name = ?", 42, "tool-server").First(&stat).Error)
+	assert.Equal(t, uint64(1), stat.Count)
 }
 
 func TestMCPProxyPromptHandler_RewritesCanonicalNameAndForwardsArguments(t *testing.T) {

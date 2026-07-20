@@ -3,199 +3,73 @@ package types
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestUserRole(t *testing.T) {
+func TestUserRoleConstants(t *testing.T) {
 	t.Parallel()
 
-	// Test UserRole constants
-	if UserRoleAdmin != "admin" {
-		t.Errorf("Expected UserRoleAdmin to be 'admin', got %s", UserRoleAdmin)
-	}
-	if UserRoleUser != "user" {
-		t.Errorf("Expected UserRoleUser to be 'user', got %s", UserRoleUser)
-	}
-
-	// Test string conversion
-	adminRole := string(UserRoleAdmin)
-	userRole := string(UserRoleUser)
-
-	if adminRole != "admin" {
-		t.Errorf("Expected adminRole string to be 'admin', got %s", adminRole)
-	}
-	if userRole != "user" {
-		t.Errorf("Expected userRole string to be 'user', got %s", userRole)
-	}
+	require.Equal(t, UserRole("system_admin"), UserRoleSystemAdmin)
+	require.Equal(t, UserRole("service_admin"), UserRoleServiceAdmin)
+	require.Equal(t, UserRole("member"), UserRoleMember)
+	require.Equal(t, UserRole("auditor"), UserRoleAuditor)
 }
 
-func TestUser(t *testing.T) {
+func TestIsValidUserRole(t *testing.T) {
 	t.Parallel()
 
-	// Test struct creation
-	user := User{
-		Username: "testuser",
-		Role:     "user",
-	}
-
-	if user.Username != "testuser" {
-		t.Errorf("Expected Username to be 'testuser', got %s", user.Username)
-	}
-	if user.Role != "user" {
-		t.Errorf("Expected Role to be 'user', got %s", user.Role)
-	}
+	require.True(t, IsValidUserRole(UserRoleSystemAdmin))
+	require.True(t, IsValidUserRole(UserRoleServiceAdmin))
+	require.True(t, IsValidUserRole(UserRoleMember))
+	require.True(t, IsValidUserRole(UserRoleAuditor))
+	require.False(t, IsValidUserRole(UserRole("owner")))
 }
 
-func TestUserZeroValues(t *testing.T) {
+func TestUserStatusConstants(t *testing.T) {
 	t.Parallel()
 
-	var user User
+	require.Equal(t, UserStatus("pending"), UserStatusPending)
+	require.Equal(t, UserStatus("active"), UserStatusActive)
+	require.Equal(t, UserStatus("disabled"), UserStatusDisabled)
+}
 
-	if user.Username != "" {
-		t.Errorf("Expected empty Username, got %s", user.Username)
-	}
-	if user.Role != "" {
-		t.Errorf("Expected empty Role, got %s", user.Role)
-	}
+func TestIsValidUserStatus(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsValidUserStatus(UserStatusPending))
+	require.True(t, IsValidUserStatus(UserStatusActive))
+	require.True(t, IsValidUserStatus(UserStatusDisabled))
+	require.False(t, IsValidUserStatus(UserStatus("revoked")))
+}
+
+func TestDeviceTokenScopeConstants(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, DeviceTokenScope("inherit_all"), DeviceTokenScopeInheritAll)
+	require.Equal(t, DeviceTokenScope("restricted"), DeviceTokenScopeRestricted)
 }
 
 func TestUserJSONMarshaling(t *testing.T) {
 	t.Parallel()
 
 	user := User{
-		Username: "testuser",
-		Role:     "admin",
+		ID:                 7,
+		Username:           "alice",
+		DisplayName:        "Alice",
+		Role:               string(UserRoleMember),
+		Status:             string(UserStatusActive),
+		MustChangePassword: true,
 	}
 
 	data, err := json.Marshal(user)
-	if err != nil {
-		t.Fatalf("Failed to marshal User: %v", err)
-	}
-
-	expected := `{"username":"testuser","role":"admin"}`
-	if string(data) != expected {
-		t.Errorf("Expected JSON %s, got %s", expected, string(data))
-	}
-}
-
-func TestUserJSONUnmarshaling(t *testing.T) {
-	t.Parallel()
-
-	jsonData := `{"username":"testuser","role":"user"}`
-	var user User
-
-	err := json.Unmarshal([]byte(jsonData), &user)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal User: %v", err)
-	}
-
-	if user.Username != "testuser" {
-		t.Errorf("Expected Username 'testuser', got %s", user.Username)
-	}
-	if user.Role != "user" {
-		t.Errorf("Expected Role 'user', got %s", user.Role)
-	}
-}
-
-func TestCreateUserRequest(t *testing.T) {
-	t.Parallel()
-
-	// Test struct creation
-	req := CreateOrUpdateUserRequest{
-		Username: "newuser",
-	}
-
-	if req.Username != "newuser" {
-		t.Errorf("Expected Username to be 'newuser', got %s", req.Username)
-	}
-}
-
-func TestCreateUserRequestZeroValues(t *testing.T) {
-	t.Parallel()
-
-	var req CreateOrUpdateUserRequest
-
-	if req.Username != "" {
-		t.Errorf("Expected empty Username, got %s", req.Username)
-	}
-}
-
-func TestCreateUserRequestJSONMarshaling(t *testing.T) {
-	t.Parallel()
-
-	req := CreateOrUpdateUserRequest{
-		Username: "newuser",
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Failed to marshal CreateOrUpdateUserRequest: %v", err)
-	}
-
-	expected := `{"username":"newuser"}`
-	if string(data) != expected {
-		t.Errorf("Expected JSON %s, got %s", expected, string(data))
-	}
-}
-
-func TestCreateUserResponse(t *testing.T) {
-	t.Parallel()
-
-	// Test struct creation
-	resp := CreateOrUpdateUserResponse{
-		Username:    "newuser",
-		Role:        "user",
-		AccessToken: "token123",
-	}
-
-	if resp.Username != "newuser" {
-		t.Errorf("Expected Username to be 'newuser', got %s", resp.Username)
-	}
-	if resp.Role != "user" {
-		t.Errorf("Expected Role to be 'user', got %s", resp.Role)
-	}
-	if resp.AccessToken != "token123" {
-		t.Errorf("Expected AccessToken to be 'token123', got %s", resp.AccessToken)
-	}
-}
-
-func TestCreateUserResponseJSONMarshaling(t *testing.T) {
-	t.Parallel()
-
-	resp := CreateOrUpdateUserResponse{
-		Username:    "newuser",
-		Role:        "admin",
-		AccessToken: "admin_token_456",
-	}
-
-	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Failed to marshal CreateOrUpdateUserResponse: %v", err)
-	}
-
-	expected := `{"username":"newuser","role":"admin","access_token":"admin_token_456"}`
-	if string(data) != expected {
-		t.Errorf("Expected JSON %s, got %s", expected, string(data))
-	}
-}
-
-func TestCreateUserResponseJSONUnmarshaling(t *testing.T) {
-	t.Parallel()
-
-	jsonData := `{"username":"newuser","role":"user","access_token":"user_token_789"}`
-	var resp CreateOrUpdateUserResponse
-
-	err := json.Unmarshal([]byte(jsonData), &resp)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal CreateOrUpdateUserResponse: %v", err)
-	}
-
-	if resp.Username != "newuser" {
-		t.Errorf("Expected Username 'newuser', got %s", resp.Username)
-	}
-	if resp.Role != "user" {
-		t.Errorf("Expected Role 'user', got %s", resp.Role)
-	}
-	if resp.AccessToken != "user_token_789" {
-		t.Errorf("Expected AccessToken 'user_token_789', got %s", resp.AccessToken)
-	}
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"id":7,
+		"username":"alice",
+		"display_name":"Alice",
+		"role":"member",
+		"status":"active",
+		"must_change_password":true
+	}`, string(data))
 }

@@ -7,8 +7,11 @@ import { extractError } from "../api/client";
 import type { DashboardPrompt, DashboardPromptsResponse } from "../types";
 import EmptyStateCard from "../components/EmptyStateCard";
 import JsonViewer from "../components/JsonViewer";
+import { useAuth } from "../store/auth";
 
 export default function PromptsPage() {
+  const { user } = useAuth();
+  const canManage = user?.role === "system_admin";
   const [data, setData] = useState<DashboardPromptsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -64,6 +67,7 @@ export default function PromptsPage() {
       render: (enabled: boolean, row) => (
         <Switch
           checked={enabled}
+          disabled={!canManage}
           loading={toggling === row.canonical_name}
           onChange={(c) => toggle(row, c)}
         />

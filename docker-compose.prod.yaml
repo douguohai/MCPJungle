@@ -1,68 +1,45 @@
-# MCPJungle Docker Compose configuration for teams & organizations.
-# Use this compose file if you want to host MCPJungle on a remote server for multiple users within your org.
-# The mcpjungle server runs in "enterprise" mode with enterprise features enabled.
 services:
-  db:
-    image: postgres:17
-    container_name: mcpjungle-db
+  mysql:
+    image: mysql:8.0
+    container_name: mcpjungle-mysql
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
     environment:
-      POSTGRES_USER: mcpjungle
-      POSTGRES_PASSWORD: mcpjungle
-      POSTGRES_DB: mcpjungle
-    ports:
-      - "5432:5432"
+      MYSQL_DATABASE: ${MYSQL_DB:-mcpjungle}
+      MYSQL_USER: ${MYSQL_USER:-mcpjungle}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      TZ: UTC
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=mcpjungle pg_isready -U mcpjungle"]
-      interval: 10s
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
     restart: unless-stopped
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: mcpjungle-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
 
   mcpjungle:
     image: ghcr.io/mcpjungle/mcpjungle:${MCPJUNGLE_IMAGE_TAG:-latest}
     container_name: mcpjungle-server
     environment:
-      DATABASE_URL: postgres://mcpjungle:mcpjungle@db:5432/mcpjungle
-      SERVER_MODE: ${SERVER_MODE:-enterprise}
+      DATABASE_URL: mysql://${MYSQL_USER:-mcpjungle}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DB:-mcpjungle}
+      SERVER_MODE: enterprise
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
       MCP_SERVER_INIT_REQ_TIMEOUT_SEC: ${MCP_SERVER_INIT_REQ_TIMEOUT_SEC:-10}
+      TZ: UTC
     ports:
-     - "${HOST_PORT:-8080}:8080"
-    # volumes:
-      # Uncomment the following lines ONLY if you need filesystem MCP server access
-      # WARNING: This mounts the host filesystem and should only be used for personal/development use
-      # Production deployments should avoid mounting host filesystem for security reasons
-      # - /:/host:ro
-      # 
-      # Alternative: Mount specific directories for better security
-      # - ${HOME}:/host/home:ro
-      # - /tmp:/host/tmp:rw
+      - "${HOST_PORT:-8080}:8080"
     depends_on:
-      db:
+      mysql:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: mcpjungle-prometheus
     ports:
       - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
     volumes:
       - prometheus_data:/prometheus
     configs:
@@ -77,15 +54,11 @@ configs:
     content: |
       global:
         scrape_interval: 15s
-        evaluation_interval: 30s
-
       scrape_configs:
-        - job_name: 'mcpjungle'
+        - job_name: mcpjungle
           static_configs:
-            - targets: ['mcpjungle:8080']
-          metrics_path: '/metrics'
-          scrape_interval: 15s
+            - targets: [mcpjungle:8080]
 
 volumes:
-  db_data:
+  mysql_data:
   prometheus_data:

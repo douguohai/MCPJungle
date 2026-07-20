@@ -10,13 +10,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
+	sessionservice "github.com/mcpjungle/mcpjungle/internal/service/session"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -42,18 +43,17 @@ type ServerOptions struct {
 	// Both sse & streamable http use http, and we don't want to mix them up either.
 	SseMcpProxyServer *server.MCPServer
 
-	MCPService       *mcp.MCPService
-	MCPClientService *mcpclient.McpClientService
-	ConfigService    *config.ServerConfigService
-	UserService      *user.UserService
-	ToolGroupService *toolgroup.ToolGroupService
-	DashboardService *dashboard.Service
+	MCPService         *mcp.MCPService
+	ConfigService      *config.ServerConfigService
+	UserService        *user.UserService
+	ToolGroupService   *toolgroup.ToolGroupService
+	DashboardService   *dashboard.Service
+	SessionService     *sessionservice.Service
+	PermissionService  *permission.Service
+	DeviceTokenService *devicetoken.Service
 
 	OtelProviders *telemetry.Providers
 	Metrics       telemetry.CustomMetrics
-
-	// AuthSigner signs and verifies user session JWTs.
-	AuthSigner *auth.Signer
 }
 
 // Server represents the MCPJungle registry server that handles MCP proxy and API requests
@@ -63,18 +63,18 @@ type Server struct {
 	mcpProxyServer    *server.MCPServer
 	sseMcpProxyServer *server.MCPServer
 
-	mcpService       *mcp.MCPService
-	mcpClientService *mcpclient.McpClientService
+	mcpService *mcp.MCPService
 
-	configService    *config.ServerConfigService
-	userService      *user.UserService
-	toolGroupService *toolgroup.ToolGroupService
-	dashboardService *dashboard.Service
+	configService      *config.ServerConfigService
+	userService        *user.UserService
+	toolGroupService   *toolgroup.ToolGroupService
+	dashboardService   *dashboard.Service
+	sessionService     *sessionservice.Service
+	permissionService  *permission.Service
+	deviceTokenService *devicetoken.Service
 
 	otelProviders *telemetry.Providers
 	metrics       telemetry.CustomMetrics
-
-	authSigner *auth.Signer
 
 	// groupMcpServers keeps track of mcp-go's server.SSEServer instances created for each tool group.
 	// These instances serve the requests made to tool groups' SSE tools.
@@ -108,14 +108,15 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		mcpProxyServer:        opts.MCPProxyServer,
 		sseMcpProxyServer:     opts.SseMcpProxyServer,
 		mcpService:            opts.MCPService,
-		mcpClientService:      opts.MCPClientService,
 		configService:         opts.ConfigService,
 		userService:           opts.UserService,
 		toolGroupService:      opts.ToolGroupService,
 		dashboardService:      opts.DashboardService,
+		sessionService:        opts.SessionService,
+		permissionService:     opts.PermissionService,
+		deviceTokenService:    opts.DeviceTokenService,
 		otelProviders:         opts.OtelProviders,
 		metrics:               opts.Metrics,
-		authSigner:            opts.AuthSigner,
 		dashboardOAuthResults: make(map[string]dashboardOAuthSessionResult),
 	}
 
@@ -203,8 +204,37 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 	r.POST("/init", s.registerInitServerHandler())
 
-	requireEnterpriseMode := s.requireServerMode(model.ModeEnterprise)
 	requireDashboardMode := s.requireDashboardMode()
+
+	if s.sessionService != nil && s.permissionService != nil && s.deviceTokenService != nil {
+		apiV1 := r.Group("/api/v1", s.requireInitialized())
+		apiV1.POST("/auth/login", s.v1Login)
+		authenticated := apiV1.Group("/", s.requireV1Session())
+		authenticated.POST("/auth/logout", s.v1Logout)
+		authenticated.GET("/auth/me", s.v1Me)
+		authenticated.PUT("/auth/password", s.v1ChangePassword)
+
+		active := authenticated.Group("/", s.requireActiveV1User())
+		active.POST("/device-tokens", s.v1CreateDeviceToken)
+		active.GET("/device-tokens", s.v1ListDeviceTokens)
+		active.DELETE("/device-tokens/:id", s.v1RevokeDeviceToken)
+
+		admin := active.Group("/", s.requireV1SystemAdmin())
+		admin.POST("/users", s.v1CreateUser)
+		admin.GET("/users", s.v1ListUsers)
+		admin.PATCH("/users/:id", s.v1UpdateUser)
+		admin.POST("/users/:id/enable", s.v1EnableUser)
+		admin.POST("/users/:id/disable", s.v1DisableUser)
+		admin.GET("/users/:id/device-tokens", s.v1ListUserDeviceTokens)
+		admin.POST("/permission-groups", s.v1CreatePermissionGroup)
+		admin.GET("/permission-groups", s.v1ListPermissionGroups)
+		admin.GET("/permission-groups/:id", s.v1GetPermissionGroup)
+		admin.PATCH("/permission-groups/:id", s.v1UpdatePermissionGroup)
+		admin.PUT("/permission-groups/:id/users", s.v1ReplacePermissionGroupUsers)
+		admin.PUT("/permission-groups/:id/services", s.v1ReplacePermissionGroupServices)
+		admin.POST("/permission-groups/:id/enable", s.v1EnablePermissionGroup)
+		admin.POST("/permission-groups/:id/disable", s.v1DisablePermissionGroup)
+	}
 
 	if s.dashboardService != nil {
 		dashboardFileServer, err := dashboardui.FileServer()
@@ -294,8 +324,10 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		s.verifyUserAuthForAPIAccess(),
 	)
 
-	// endpoints accessible by a standard user in enterprise mode or anyone in development mode
-	userAPI := apiV0.Group("/")
+	// The legacy human invocation/read endpoints are development-only. In
+	// enterprise mode, MCP access must use a personal device token through the
+	// MCP transport so the permission-group decision cannot be bypassed.
+	userAPI := apiV0.Group("/", s.requireServerMode(model.ModeDev))
 	{
 		userAPI.GET("/servers", s.listServersHandler())
 
@@ -312,13 +344,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.GET("/prompt", s.getPromptHandler())
 		userAPI.POST("/prompts/render", s.getPromptWithArgsHandler())
 
-		userAPI.GET("/users/whoami", requireEnterpriseMode, s.whoAmIHandler())
-
-		// MCP clients: each user manages their own; admins see all (enterprise only).
-		userAPI.GET("/clients", requireEnterpriseMode, s.listMcpClientsHandler())
-		userAPI.POST("/clients", requireEnterpriseMode, s.createMcpClientHandler())
-		userAPI.PUT("/clients/:name", requireEnterpriseMode, s.updateMcpClientHandler())
-		userAPI.DELETE("/clients/:name", requireEnterpriseMode, s.deleteMcpClientHandler())
 	}
 
 	// endpoints only accessible by an admin user in enterprise mode or anyone in development mode
@@ -339,28 +364,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 		adminAPI.POST("/prompts/enable", s.enablePromptsHandler())
 		adminAPI.POST("/prompts/disable", s.disablePromptsHandler())
-
-		// endpoints for managing human users (enterprise mode only)
-		adminAPI.POST(
-			"/users",
-			requireEnterpriseMode,
-			s.createUserHandler(),
-		)
-		adminAPI.GET(
-			"/users",
-			requireEnterpriseMode,
-			s.listUsersHandler(),
-		)
-		adminAPI.DELETE(
-			"/users/:username",
-			requireEnterpriseMode,
-			s.deleteUserHandler(),
-		)
-		adminAPI.PUT(
-			"/users/:username",
-			requireEnterpriseMode,
-			s.updateUserHandler(),
-		)
 
 		// endpoints for managing tool groups
 		adminAPI.POST("/tool-groups", s.createToolGroupHandler())

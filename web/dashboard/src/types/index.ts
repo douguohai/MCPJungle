@@ -35,6 +35,7 @@ export interface DashboardServerConfigSummary {
 }
 
 export interface DashboardServer {
+  id: number;
   name: string;
   transport: string;
   enabled: boolean;
@@ -188,41 +189,67 @@ export interface VerifyTokenResponse {
 }
 
 export interface LoginResponse {
-  token: string;
-  expires_at: string;
-  user: { username: string; role: string };
+  user: AuthUser;
+  must_change_password: boolean;
 }
 
-export interface DashboardUser {
-  username?: string;
-  role?: string;
+export type UserRole = "system_admin" | "service_admin" | "member" | "auditor";
+export type UserStatus = "pending" | "active" | "disabled";
+export type DeviceTokenScope = "inherit_all" | "restricted";
+
+export interface AuthUser {
+  ID: number;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  status: UserStatus;
+  must_change_password: boolean;
+  last_login_at?: string;
 }
 
-export interface McpClient {
-  name: string;
-  description: string;
-  user_id?: number;
-  access_token?: string;
-  is_custom_access_token?: boolean;
-  allow_list: string[];
-}
-
-export interface CreateClientInput {
-  name: string;
-  description?: string;
-  allow_list: string[];
+export interface UserAccount extends AuthUser {
+  CreatedAt?: string;
+  UpdatedAt?: string;
 }
 
 export interface CreateUserResponse {
-  username: string;
-  role: string;
-  access_token: string;
+  user: UserAccount;
+  initial_password: string;
 }
 
-export interface UserListItem {
-  username: string;
-  role: string;
-  allowed_servers?: string[] | null;
+export interface PermissionGroup {
+  ID: number;
+  name: string;
+  display_name: string;
+  description?: string;
+  enabled: boolean;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+}
+
+export interface PermissionGroupDetail {
+  group: PermissionGroup;
+  user_ids: number[];
+  service_ids: number[];
+}
+
+export interface DeviceToken {
+  ID: number;
+  user_id: number;
+  name: string;
+  token_prefix: string;
+  scope: DeviceTokenScope;
+  expires_at: string;
+  last_used_at?: string;
+  last_used_ip?: string;
+  client_info?: string;
+  revoked_at?: string;
+  CreatedAt?: string;
+}
+
+export interface CreateDeviceTokenResponse {
+  device_token: DeviceToken;
+  token: string;
 }
 
 export interface CallStat {

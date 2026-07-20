@@ -3,7 +3,7 @@ title: "CLI configuration file"
 description: "Reference for ~/.mcpjungle.conf"
 ---
 
-The Mcpjungle CLI reads a YAML configuration file at `~/.mcpjungle.conf` on startup. It stores two values: the URL of the Mcpjungle server and an access token for authenticated requests. Most users never edit this file by hand — `mcpjungle init-server` and `mcpjungle login` write to it automatically.
+The Mcpjungle CLI reads a YAML configuration file at `~/.mcpjungle.conf` on startup. It stores the URL of the Mcpjungle server for CLI requests. Most users never edit this file by hand.
 
 ## Client config file (`~/.mcpjungle.conf`)
 
@@ -13,10 +13,9 @@ The file lives in your home directory and uses YAML syntax:
 
 ```yaml
 registry_url: http://my-server:9000
-access_token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
 ```
 
-Both fields are optional. If either is absent the CLI falls back to its default value or prompts you to supply it via a CLI flag.
+The field is optional. If it is absent the CLI falls back to its default value or prompts you to supply it via a CLI flag.
 
 ### Supported fields
 
@@ -25,14 +24,6 @@ Both fields are optional. If either is absent the CLI falls back to its default 
 
   ```yaml
   registry_url: http://my-server:9000
-  ```
-</ParamField>
-
-<ParamField path="access_token" type="string">
-  Bearer token sent in the `Authorization: Bearer` header with every API request. Required when the server runs in enterprise mode. Populated automatically by `mcpjungle init-server` (admin token) or `mcpjungle login` (user token).
-
-  ```yaml
-  access_token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
   ```
 </ParamField>
 
@@ -50,14 +41,9 @@ When the CLI resolves the registry URL it uses the following order, highest prio
 
 ### Populating the file automatically
 
-`~/.mcpjungle.conf` is usually created or updated in one of two ways:
+`~/.mcpjungle.conf` is usually created or updated by the CLI when you set or reuse a registry URL. You can also edit the file manually if needed.
 
-- `mcpjungle init-server` writes the initial admin credentials during enterprise bootstrap
-- `mcpjungle login <user-token>` stores a user token for later authenticated CLI use
-
-You can also edit the file manually if needed.
-
-For the enterprise bootstrap flow and login workflow, see [Enterprise operations](/reference/cli-enterprise).
+For the enterprise bootstrap flow and Dashboard workflow, see [Enterprise operations](/reference/cli-enterprise).
 
 ---
 
@@ -182,64 +168,4 @@ Used with `mcpjungle create group -c <file>`.
   At least one of `included_tools` or `included_servers` should be set, otherwise the group will be empty.
 </Note>
 
-### Create an MCP client
-
-Used with `mcpjungle create mcp-client --conf <file>` (enterprise mode).
-
-```json
-{
-  "name": "cursor-local",
-  "allowed_servers": ["calculator", "github"],
-  "access_token": "my_secret_token_123",
-  "access_token_ref": {
-    "file": "/run/secrets/mcpjungle_token",
-    "env": "MCPJUNGLE_CLIENT_TOKEN"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | Yes | Unique name for this MCP client. |
-| `allowed_servers` | string array | No | Server names the client may access. Use `"*"` to allow all servers. Omit to deny all. |
-| `access_token` | string | No | Inline token value. For testing only. |
-| `access_token_ref.file` | string | No | Path to a plain-text file containing only the token string. |
-| `access_token_ref.env` | string | No | Name of an environment variable containing the token string. |
-
-<Warning>
-  When creating a client from a config file, you must supply a token via `access_token` or `access_token_ref`. Mcpjungle cannot print a generated token back to the console when reading from a file.
-</Warning>
-
-### Token supply strategies
-
-For MCP client and user config files, there are three ways to supply a custom token:
-
-1. `access_token`
-2. `access_token_ref.file`
-3. `access_token_ref.env`
-
-Use `access_token` only for testing or throwaway setups. For anything more serious, prefer file- or environment-based secrets.
-
-### Create a user account
-
-Used with `mcpjungle create user --conf <file>` (enterprise mode).
-
-```json
-{
-  "name": "charlie",
-  "access_token": "charlies_secret_token",
-  "access_token_ref": {
-    "file": "/path/to/token-file.txt",
-    "env": "CHARLIE_TOKEN"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | Yes | Unique username. |
-| `access_token` | string | No | Inline token value. For testing only. |
-| `access_token_ref.file` | string | No | Path to a plain-text file containing only the token string. |
-| `access_token_ref.env` | string | No | Name of an environment variable containing the token string. |
-
-The same `${VAR_NAME}` placeholder substitution applies to user config files. When using a config file you must supply a token — Mcpjungle cannot print a generated one to the console.
+Enterprise users, permission groups, and personal device tokens are managed in the Dashboard. There is no JSON config-file workflow for those entities.

@@ -9,16 +9,14 @@ The long-running HTTP service that you run either locally or deploy to a remote 
 It exposes a REST API for managing mcpjungle registry itself and a streamable HTTP endpoint at `/mcp` for AI clients to connect to.
 
 ### Data persistence
-Mcpjungle stores all its data in a SQL database.
+Mcpjungle stores all its data in MySQL 8.0. `DATABASE_URL` is required at startup, and the database must use UTC and `utf8mb4`.
 
-By default, it uses SQLite with a local file. For production deployments, we recommend PostgreSQL.
-
-If you use the docker-compose.yaml provided in the repository, it will automatically start a PostgreSQL container and ensure connectivity.
+If you use the `docker-compose.yaml` provided in the repository, it automatically starts a MySQL 8.0 container with those settings and ensures connectivity.
 
 ## Mcpjungle client
-The `mcpjungle` CLI tool you run from your terminal for server management and automation.
+The `mcpjungle` CLI tool you run from your terminal for server management and automation in development mode.
 
-Today, the CLI remains the most complete management client, and MCPJungle also includes a Dashboard UI for local/dev visibility and common management tasks.
+For enterprise deployments, ongoing management moves into the Dashboard UI. Use the Dashboard for users, personal device tokens, permission groups, and other shared-deployment tasks.
 
 You can also build your own clients that talk to the server's REST API for custom management interfaces or automation.
 
@@ -116,8 +114,8 @@ This mode is ideal for teams running shared MCP infrastructure in an enterprise 
 Use enterprise mode when:
 
 - users need shared access to MCPs
-- you need authenticated client access to MCPs
-- you need Access Control
+- you need authenticated client access through personal device tokens
+- you need permission groups instead of per-client access rules
 - you need centralized management and governance features such as observability, audit logs, etc
 
 <Info>
@@ -138,8 +136,8 @@ This concept is only relevant in enterprise mode.
 
 Enterprise mode distinguishes between two identity types:
 
-- **MCP clients**: Non-human identities AI clients like Cursor, Claude, Codex, custom agents, etc. They authenticate to the gateway and receive access to specific servers.
-- **Users**: Human operators who use the CLI or HTTP API. Standard users can inspect and use Mcpjungle, but write access remains restricted to admins.
+- **MCP clients**: Non-human consumers such as Cursor, Claude, Codex, and custom agents. They authenticate with personal device tokens sent in `Authorization: Bearer`, and the token inherits the permissions assigned to the owning user.
+- **Users**: Human operators who sign in with username and password through the Dashboard. The first sign-in uses a one-time initial password and sets the `mcpj_session` cookie for the browser session.
 
 ## Stateless versus stateful sessions
 

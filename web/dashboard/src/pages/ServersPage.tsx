@@ -9,8 +9,11 @@ import TransportTag from "../components/TransportTag";
 import StatusBadge from "../components/StatusBadge";
 import EmptyStateCard from "../components/EmptyStateCard";
 import ServerForm from "../components/ServerForm";
+import { useAuth } from "../store/auth";
 
 export default function ServersPage() {
+  const { user } = useAuth();
+  const canManage = user?.role === "system_admin";
   const [data, setData] = useState<DashboardServersResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -63,7 +66,12 @@ export default function ServersPage() {
       title: "启用",
       dataIndex: "enabled",
       render: (enabled: boolean, row) => (
-        <Switch checked={enabled} loading={toggling === row.name} onChange={(c) => toggle(row, c)} />
+        <Switch
+          checked={enabled}
+          disabled={!canManage}
+          loading={toggling === row.name}
+          onChange={(c) => toggle(row, c)}
+        />
       ),
     },
     { title: "工具", dataIndex: "tool_count", width: 70 },
@@ -82,32 +90,32 @@ export default function ServersPage() {
     {
       title: "操作",
       key: "actions",
-      render: (_, row) => (
+      render: (_, row) => canManage ? (
         <Popconfirm title={`确认删除 ${row.name}？`} onConfirm={() => remove(row.name)}>
           <Button danger size="small">
             删除
           </Button>
         </Popconfirm>
-      ),
+      ) : null,
     },
   ];
 
-  const addButton = (
+  const addButton = canManage ? (
     <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
       添加
     </Button>
-  );
+  ) : null;
 
   if (data?.empty_state && (!data.servers || data.servers.length === 0)) {
     return (
       <>
         <EmptyStateCard
           state={data.empty_state}
-          action={
+          action={canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               注册第一个 MCP 服务器
             </Button>
-          }
+          ) : undefined}
         />
         <ServerForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={load} />
       </>

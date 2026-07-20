@@ -24,16 +24,26 @@ const (
 
 // ManagedSession represents a persistent connection to an MCP server.
 type ManagedSession struct {
+	Key        SessionKey
 	ServerName string
 	Client     *client.Client
 	CreatedAt  time.Time
 	LastUsedAt time.Time
 }
 
+// SessionKey isolates stateful upstream connections by the authenticated MCP
+// caller. Development-mode requests have zero user/token IDs and therefore
+// retain one shared session per upstream server.
+type SessionKey struct {
+	ServerName    string
+	UserID        uint
+	DeviceTokenID uint
+}
+
 // SessionManager manages persistent connections to MCP servers configured in stateful mode.
 type SessionManager struct {
 	mu       sync.RWMutex
-	sessions map[string]*ManagedSession // key: server name
+	sessions map[SessionKey]*ManagedSession
 
 	idleTimeoutSec    int
 	initReqTimeoutSec int
@@ -65,7 +75,7 @@ func NewSessionManager(cfg *SessionManagerConfig) *SessionManager {
 	}
 
 	sm := &SessionManager{
-		sessions:          make(map[string]*ManagedSession),
+		sessions:          make(map[SessionKey]*ManagedSession),
 		idleTimeoutSec:    idleTimeout,
 		initReqTimeoutSec: cfg.InitReqTimeoutSec,
 		cleanupStopChan:   make(chan struct{}),
@@ -87,9 +97,10 @@ func NewSessionManager(cfg *SessionManagerConfig) *SessionManager {
 func (sm *SessionManager) GetOrCreateSession(ctx context.Context, server *model.McpServer) (*client.Client, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+	key := sessionKeyFromContext(ctx, server.Name)
 
 	// Check if we have an existing session
-	if session, exists := sm.sessions[server.Name]; exists {
+	if session, exists := sm.sessions[key]; exists {
 		session.LastUsedAt = time.Now()
 		return session.Client, nil
 	}
@@ -100,7 +111,8 @@ func (sm *SessionManager) GetOrCreateSession(ctx context.Context, server *model.
 		return nil, fmt.Errorf("failed to create session for server '%s': %w", server.Name, err)
 	}
 
-	sm.sessions[server.Name] = &ManagedSession{
+	sm.sessions[key] = &ManagedSession{
+		Key:        key,
 		ServerName: server.Name,
 		Client:     mcpClient,
 		CreatedAt:  time.Now(),
@@ -117,32 +129,35 @@ func (sm *SessionManager) CloseSession(serverName string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	if session, exists := sm.sessions[serverName]; exists {
+	for key, session := range sm.sessions {
+		if key.ServerName != serverName {
+			continue
+		}
 		if session.Client != nil {
 			if err := session.Client.Close(); err != nil {
 				log.Printf("[SessionManager] Error closing session for server '%s': %v", serverName, err)
 			}
 		}
-		delete(sm.sessions, serverName)
-		log.Printf("[SessionManager] Closed session for server '%s'", serverName)
+		delete(sm.sessions, key)
 	}
+	log.Printf("[SessionManager] Closed all sessions for server '%s'", serverName)
 }
 
 // InvalidateSession closes and removes a session due to a detected error.
 // This is called reactively when a connection error is detected during a tool call.
 // The next call to GetOrCreateSession will create a fresh session.
-func (sm *SessionManager) InvalidateSession(serverName string, reason string) {
+func (sm *SessionManager) InvalidateSession(key SessionKey, reason string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	if session, exists := sm.sessions[serverName]; exists {
+	if session, exists := sm.sessions[key]; exists {
 		if session.Client != nil {
 			if err := session.Client.Close(); err != nil {
-				log.Printf("[SessionManager] Error closing unhealthy session for server '%s': %v", serverName, err)
+				log.Printf("[SessionManager] Error closing unhealthy session for server '%s': %v", key.ServerName, err)
 			}
 		}
-		delete(sm.sessions, serverName)
-		log.Printf("[SessionManager] Invalidated unhealthy session for server '%s': %s", serverName, reason)
+		delete(sm.sessions, key)
+		log.Printf("[SessionManager] Invalidated unhealthy session for server '%s': %s", key.ServerName, reason)
 	}
 }
 
@@ -152,13 +167,13 @@ func (sm *SessionManager) CloseAllSessions() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	for name, session := range sm.sessions {
+	for key, session := range sm.sessions {
 		if session.Client != nil {
 			if err := session.Client.Close(); err != nil {
-				log.Printf("[SessionManager] Error closing session for server '%s': %v", name, err)
+				log.Printf("[SessionManager] Error closing session for server '%s': %v", key.ServerName, err)
 			}
 		}
-		delete(sm.sessions, name)
+		delete(sm.sessions, key)
 	}
 
 	log.Printf("[SessionManager] Closed all sessions")
@@ -179,8 +194,12 @@ func (sm *SessionManager) Shutdown() {
 func (sm *SessionManager) HasSession(serverName string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	_, exists := sm.sessions[serverName]
-	return exists
+	for key := range sm.sessions {
+		if key.ServerName == serverName {
+			return true
+		}
+	}
+	return false
 }
 
 // SessionCount returns the number of active sessions.
@@ -219,17 +238,26 @@ func (sm *SessionManager) cleanupIdleSessions() {
 	now := time.Now()
 	idleThreshold := time.Duration(sm.idleTimeoutSec) * time.Second
 
-	for name, session := range sm.sessions {
+	for key, session := range sm.sessions {
 		if now.Sub(session.LastUsedAt) > idleThreshold {
-			log.Printf("[SessionManager] Closing idle session for server '%s' (idle for %v)", name, now.Sub(session.LastUsedAt))
+			log.Printf("[SessionManager] Closing idle session for server '%s' (idle for %v)", key.ServerName, now.Sub(session.LastUsedAt))
 			if session.Client != nil {
 				if err := session.Client.Close(); err != nil {
-					log.Printf("[SessionManager] Error closing session for server '%s': %v", name, err)
+					log.Printf("[SessionManager] Error closing session for server '%s': %v", key.ServerName, err)
 				}
 			}
-			delete(sm.sessions, name)
+			delete(sm.sessions, key)
 		}
 	}
+}
+
+func sessionKeyFromContext(ctx context.Context, serverName string) SessionKey {
+	key := SessionKey{ServerName: serverName}
+	if access, ok := AccessFromContext(ctx); ok {
+		key.UserID = access.UserID
+		key.DeviceTokenID = access.DeviceTokenID
+	}
+	return key
 }
 
 func createMcpServerConnectionWithDB(

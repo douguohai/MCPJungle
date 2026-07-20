@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
-	"gorm.io/gorm"
 )
 
 // requireInitialized is middleware to reject requests to certain routes if the server is not initialized
@@ -50,11 +49,9 @@ func (s *Server) requireDashboardMode() gin.HandlerFunc {
 	}
 }
 
-// verifyUserAuthForAPIAccess is middleware that authenticates a request in
-// enterprise mode. It accepts either a short-lived session JWT (issued by the
-// dashboard login) or, during the migration, a legacy long-lived access token.
-// Dev mode is always allowed. This middleware does not check the user's role;
-// requireAdminUser does that.
+// verifyUserAuthForAPIAccess authenticates human API calls using the same
+// server-side session cookie as /api/v1. It remains attached to the existing
+// service-management routes until those routes are moved to v1.
 func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -73,51 +70,19 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 
-		authHeader := c.GetHeader("Authorization")
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing access token"})
+		plain, err := c.Cookie(sessionCookieName)
+		if err != nil || strings.TrimSpace(plain) == "" || s.sessionService == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid session"})
 			return
 		}
-
-		// Prefer a session JWT (human dashboard login).
-		if user, ok := s.userFromJWT(token); ok {
-			c.Set("user", user)
-			c.Next()
+		account, _, err := s.sessionService.Authenticate(plain)
+		if err != nil || account.Status != types.UserStatusActive || account.MustChangePassword {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid session"})
 			return
 		}
-
-		// Fall back to a legacy long-lived access token during the migration.
-		if user, err := s.userService.GetUserByAccessToken(token); err == nil {
-			c.Set("user", user)
-			c.Next()
-			return
-		}
-
-		// Fixed message — never echo internal errors to unauthenticated callers.
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.Set("user", account)
+		c.Next()
 	}
-}
-
-// userFromJWT parses a session JWT and reconstructs the user from its claims
-// without a DB lookup. Returns (nil, false) if the token is not a valid JWT.
-func (s *Server) userFromJWT(token string) (*model.User, bool) {
-	if s.authSigner == nil {
-		return nil, false
-	}
-	claims, err := s.authSigner.Parse(token)
-	if err != nil {
-		return nil, false
-	}
-	uid, err := strconv.ParseUint(claims.Subject, 10, 64)
-	if err != nil {
-		return nil, false
-	}
-	return &model.User{
-		Model:    gorm.Model{ID: uint(uid)},
-		Username: claims.Username,
-		Role:     types.UserRole(claims.Role),
-	}, true
 }
 
 // currentUser returns the authenticated user placed in the gin context by
@@ -161,7 +126,7 @@ func (s *Server) requireAdminUser() gin.HandlerFunc {
 		}
 
 		u, ok := authenticatedUser.(*model.User)
-		if ok && u.Role == types.UserRoleAdmin {
+		if ok && u.Role == types.UserRoleSystemAdmin {
 			c.Next()
 			return
 		}
@@ -173,7 +138,6 @@ func (s *Server) requireAdminUser() gin.HandlerFunc {
 // requireServerMode is middleware that checks if the server is in a specific mode.
 // If not, the request is rejected with a 403 Forbidden status.
 // This is useful for routes that should only be accessible in certain modes (e.g., enterprise-only features).
-// NOTE: ModeProd is supported for backwards compatibility, it is equivalent to ModeEnterprise.
 func (s *Server) requireServerMode(m model.ServerMode) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -205,9 +169,8 @@ func (s *Server) requireServerMode(m model.ServerMode) gin.HandlerFunc {
 	}
 }
 
-// checkAuthForMcpProxyAccess is middleware for MCP proxy that checks for a valid MCP client token
-// if the server is in enterprise mode.
-// In development mode, mcp clients do not require auth to access the MCP proxy.
+// checkAuthForMcpProxyAccess accepts only personal device tokens in enterprise
+// mode and attaches their freshly calculated service set to the MCP context.
 func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -233,25 +196,31 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 		}
 
 		authHeader := c.GetHeader("Authorization")
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing MCP client access token"})
+		plain, found := strings.CutPrefix(authHeader, "Bearer ")
+		if !found || strings.TrimSpace(plain) == "" || s.deviceTokenService == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing device token"})
 			return
 		}
-		client, err := s.mcpClientService.GetClientByToken(token)
+		account, deviceToken, effectiveIDs, err := s.deviceTokenService.Authenticate(plain, c.ClientIP(), c.Request.UserAgent())
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid MCP client token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid device token"})
 			return
 		}
-
-		// inject the authenticated MCP client + its owner user (for user-level
-		// AllowedServers enforcement) into the request context for the proxy.
-		ctx = context.WithValue(c.Request.Context(), "client", client)
-		if client.UserID > 0 {
-			if user, err := s.userService.GetUserByID(client.UserID); err == nil {
-				ctx = context.WithValue(ctx, "user", user)
+		servers, err := s.mcpService.ListMcpServers()
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve device permissions"})
+			return
+		}
+		names := make(map[string]struct{}, len(effectiveIDs))
+		for _, server := range servers {
+			if _, allowed := effectiveIDs[server.ID]; allowed && server.Enabled {
+				names[server.Name] = struct{}{}
 			}
 		}
+		ctx = mcp.WithAccessContext(c.Request.Context(), mcp.AccessContext{
+			UserID: account.ID, DeviceTokenID: deviceToken.ID,
+			EffectiveServiceIDs: effectiveIDs, EffectiveServerNames: names,
+		})
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

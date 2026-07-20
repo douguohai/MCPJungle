@@ -321,7 +321,12 @@ func SetupTestDB(t *testing.T) *TestDBSetup {
 	// Migrate all common models
 	err := db.AutoMigrate(
 		&model.User{},
-		&model.McpClient{},
+		&model.UserSession{},
+		&model.PermissionGroup{},
+		&model.PermissionGroupUser{},
+		&model.PermissionGroupMcpServer{},
+		&model.DeviceToken{},
+		&model.DeviceTokenService{},
 		&model.McpServer{},
 		&model.Tool{},
 		&model.ServerConfig{},
@@ -345,9 +350,11 @@ func SetupUserTest(t *testing.T) (*TestDBSetup, *model.User) {
 
 	// Create a basic test user
 	testUser := &model.User{
-		Username:    "testuser",
-		Role:        types.UserRoleUser,
-		AccessToken: "test-access-token-123",
+		Username:     "testuser",
+		DisplayName:  "Test User",
+		Role:         types.UserRoleMember,
+		Status:       types.UserStatusActive,
+		PasswordHash: "unused-test-password-hash",
 	}
 
 	err := setup.DB.Create(testUser).Error
@@ -364,9 +371,11 @@ func SetupAdminTest(t *testing.T) (*TestDBSetup, *model.User) {
 
 	// Create a basic test admin user
 	testAdmin := &model.User{
-		Username:    "testadmin",
-		Role:        types.UserRoleAdmin,
-		AccessToken: "test-admin-token-456",
+		Username:     "testadmin",
+		DisplayName:  "Test Admin",
+		Role:         types.UserRoleSystemAdmin,
+		Status:       types.UserStatusActive,
+		PasswordHash: "unused-test-password-hash",
 	}
 
 	err := setup.DB.Create(testAdmin).Error
@@ -387,26 +396,6 @@ func SetupMCPTest(t *testing.T) *TestDBSetup {
 	return setup
 }
 
-// SetupClientTest creates a test database with MCP client models and a basic test client
-func SetupClientTest(t *testing.T) (*TestDBSetup, *model.McpClient) {
-	t.Helper()
-
-	setup := SetupTestDB(t)
-
-	// Create a basic test MCP client
-	testClient := &model.McpClient{
-		Name:        "test-client",
-		Description: "Test MCP client for unit tests",
-		AccessToken: "test-client-token-789",
-		AllowList:   []byte("[]"), // Empty allow list
-	}
-
-	err := setup.DB.Create(testClient).Error
-	AssertNoError(t, err)
-
-	return setup, testClient
-}
-
 // SetupServerConfigTest creates a test database with server config models
 func SetupServerConfigTest(t *testing.T) *TestDBSetup {
 	t.Helper()
@@ -421,9 +410,11 @@ func SetupServerConfigTest(t *testing.T) *TestDBSetup {
 // CreateTestUser creates a test user with the given parameters
 func (s *TestDBSetup) CreateTestUser(username string, role types.UserRole, accessToken string) *model.User {
 	user := &model.User{
-		Username:    username,
-		Role:        role,
-		AccessToken: accessToken,
+		Username:     username,
+		DisplayName:  username,
+		Role:         role,
+		Status:       types.UserStatusActive,
+		PasswordHash: "unused-test-password-hash",
 	}
 
 	err := s.DB.Create(user).Error
@@ -432,37 +423,6 @@ func (s *TestDBSetup) CreateTestUser(username string, role types.UserRole, acces
 	}
 
 	return user
-}
-
-// CreateTestMcpClient creates a test MCP client with the given parameters
-func (s *TestDBSetup) CreateTestMcpClient(name, description, accessToken string, allowList []string) *model.McpClient {
-	allowListJSON := []byte("[]")
-	if len(allowList) > 0 {
-		// Create a proper JSON array
-		jsonStr := "["
-		for i, item := range allowList {
-			if i > 0 {
-				jsonStr += ","
-			}
-			jsonStr += fmt.Sprintf(`"%s"`, item)
-		}
-		jsonStr += "]"
-		allowListJSON = []byte(jsonStr)
-	}
-
-	client := &model.McpClient{
-		Name:        name,
-		Description: description,
-		AccessToken: accessToken,
-		AllowList:   allowListJSON,
-	}
-
-	err := s.DB.Create(client).Error
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create test MCP client: %v", err))
-	}
-
-	return client
 }
 
 // CreateTestMcpServer creates a test MCP server with the given parameters

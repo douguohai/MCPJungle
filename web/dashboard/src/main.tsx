@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import App from "./App";
 import "./index.css";
+import { AuthProvider } from "./store/auth";
 
 dayjs.locale("zh-cn");
 
@@ -17,7 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       theme={{ token: { colorPrimary: "#1677ff", borderRadius: 6 } }}
     >
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     </ConfigProvider>
   </React.StrictMode>,

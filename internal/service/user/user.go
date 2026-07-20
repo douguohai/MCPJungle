@@ -1,11 +1,13 @@
-// Package user provides user service functionality for the MCPJungle application.
+// Package user implements the lifecycle of internal human accounts.
 package user
 
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
-	"github.com/mcpjungle/mcpjungle/internal"
+	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
@@ -13,203 +15,309 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserService provides methods to manage users in the MCPJungle system.
+const minimumPasswordLength = 12
+
+type CreateUserInput struct {
+	Username    string
+	DisplayName string
+	Role        types.UserRole
+}
+
+type UpdateUserInput struct {
+	DisplayName *string
+	Role        *types.UserRole
+}
+
 type UserService struct {
 	db *gorm.DB
 }
 
-func NewUserService(db *gorm.DB) *UserService {
-	return &UserService{db: db}
-}
+func NewUserService(db *gorm.DB) *UserService { return &UserService{db: db} }
 
-// CreateAdminUser creates an admin user with the given username and password.
-// The password is bcrypt-hashed before storage; the plaintext is never persisted.
-func (u *UserService) CreateAdminUser(username, password string) (*model.User, error) {
-	if password == "" {
-		return nil, fmt.Errorf("admin password must not be empty: %w", apierrors.ErrInvalidInput)
-	}
+// CreateAdminUser creates the initial active administrator used during server
+// initialization. Ordinary accounts must be created with Create instead.
+func (s *UserService) CreateAdminUser(username, password string) (*model.User, error) {
+	username = strings.TrimSpace(username)
 	if username == "" {
 		username = "admin"
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash admin password: %w", err)
-	}
-	user := model.User{
-		Username:     username,
-		Role:         types.UserRoleAdmin,
-		PasswordHash: string(hash),
-	}
-	if err := u.db.Create(&user).Error; err != nil {
-		return nil, fmt.Errorf("failed to create admin user: %w", err)
-	}
-	return &user, nil
-}
-
-// GetUserByAccessToken returns a user associated with the provided (legacy)
-// access token. Retained for backward compatibility during the migration to
-// password+JWT auth; new logins go through VerifyPassword.
-func (u *UserService) GetUserByAccessToken(token string) (*model.User, error) {
-	var user model.User
-	if err := u.db.Where("access_token = ?", token).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
-		}
-		return nil, fmt.Errorf("failed to verify token: %w", err)
-	}
-	return &user, nil
-}
-
-// GetUserByUsername returns the user with the given username.
-func (u *UserService) GetUserByUsername(username string) (*model.User, error) {
-	var user model.User
-	if err := u.db.Where("username = ?", username).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
-		}
-		return nil, fmt.Errorf("failed to find user: %w", err)
-	}
-	return &user, nil
-}
-
-// GetUserByID returns the user with the given primary key.
-func (u *UserService) GetUserByID(id uint) (*model.User, error) {
-	var user model.User
-	if err := u.db.First(&user, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
-		}
-		return nil, fmt.Errorf("failed to find user: %w", err)
-	}
-	return &user, nil
-}
-
-// VerifyPassword authenticates a user by username+password. It returns
-// apierrors.ErrInvalidCredentials for any mismatch (unknown user, unset
-// password, or wrong password) so callers cannot distinguish which failed.
-func (u *UserService) VerifyPassword(username, password string) (*model.User, error) {
-	user, err := u.GetUserByUsername(username)
-	if err != nil {
-		if errors.Is(err, apierrors.ErrNotFound) {
-			return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
-		}
+	if err := validatePassword(password); err != nil {
 		return nil, err
 	}
-	if user.PasswordHash == "" {
-		// legacy/migrated user has not set a password yet
-		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
-	}
-	return user, nil
-}
-
-// SetPasswordHash is a helper that bcrypt-hashes a plaintext password.
-func SetPasswordHash(password string) (string, error) {
-	if password == "" {
-		return "", fmt.Errorf("password must not be empty: %w", apierrors.ErrInvalidInput)
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := hashPassword(password)
 	if err != nil {
-		return "", fmt.Errorf("failed to hash password: %w", err)
+		return nil, err
 	}
-	return string(hash), nil
+	account := &model.User{
+		Username:           username,
+		DisplayName:        username,
+		Role:               types.UserRoleSystemAdmin,
+		Status:             types.UserStatusActive,
+		PasswordHash:       hash,
+		MustChangePassword: false,
+	}
+	if err := s.db.Create(account).Error; err != nil {
+		return nil, fmt.Errorf("create system administrator: %w", err)
+	}
+	return account, nil
 }
 
-// CreateUser creates a new user with the specified username.
-// This method currently only supports creating a standard user, ie, user with the "user" role.
-func (u *UserService) CreateUser(input *model.User) (*model.User, error) {
-	user := model.User{
-		Username: input.Username,
-		Role:     types.UserRoleUser,
+// Create creates a pending account and returns its one-time initial password.
+// The plaintext password is never stored.
+func (s *UserService) Create(input CreateUserInput) (*model.User, string, error) {
+	input.Username = strings.TrimSpace(input.Username)
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	if input.Username == "" {
+		return nil, "", fmt.Errorf("username is required: %w", apierrors.ErrInvalidInput)
 	}
-	if input.AccessToken == "" {
-		// no custom access token provided, generate a new one
-		token, err := internal.GenerateAccessToken()
+	if input.DisplayName == "" {
+		input.DisplayName = input.Username
+	}
+	if input.Role == "" {
+		input.Role = types.UserRoleMember
+	}
+	if !types.IsValidUserRole(input.Role) {
+		return nil, "", fmt.Errorf("invalid user role: %w", apierrors.ErrInvalidInput)
+	}
+	plain, err := auth.Generate("", 18)
+	if err != nil {
+		return nil, "", err
+	}
+	hash, err := hashPassword(plain)
+	if err != nil {
+		return nil, "", err
+	}
+	account := &model.User{
+		Username:           input.Username,
+		DisplayName:        input.DisplayName,
+		Role:               input.Role,
+		Status:             types.UserStatusPending,
+		PasswordHash:       hash,
+		MustChangePassword: true,
+	}
+	if err := s.db.Create(account).Error; err != nil {
+		return nil, "", fmt.Errorf("create user: %w", err)
+	}
+	return account, plain, nil
+}
+
+func (s *UserService) VerifyPassword(username, password string) (*model.User, error) {
+	var account model.User
+	err := s.db.Where("username = ?", strings.TrimSpace(username)).First(&account).Error
+	if err != nil || account.Status == types.UserStatusDisabled || account.PasswordHash == "" {
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("find user: %w", err)
+		}
+		return nil, fmt.Errorf("authenticate user: %w", apierrors.ErrInvalidCredentials)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(password)) != nil {
+		return nil, fmt.Errorf("authenticate user: %w", apierrors.ErrInvalidCredentials)
+	}
+	now := time.Now().UTC()
+	if err := s.db.Model(&account).Update("last_login_at", now).Error; err != nil {
+		return nil, fmt.Errorf("record login: %w", err)
+	}
+	account.LastLoginAt = &now
+	return &account, nil
+}
+
+func (s *UserService) ChangePassword(userID uint, current, next string) error {
+	if err := validatePassword(next); err != nil {
+		return err
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var account model.User
+		if err := tx.First(&account, userID).Error; err != nil {
+			return mapNotFound("user", err)
+		}
+		if account.Status == types.UserStatusDisabled ||
+			bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(current)) != nil {
+			return fmt.Errorf("change password: %w", apierrors.ErrInvalidCredentials)
+		}
+		hash, err := hashPassword(next)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		user.AccessToken = token
-	} else {
-		// validate the user-provided custom access token
-		if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
-			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+		updates := map[string]any{
+			"password_hash":        hash,
+			"must_change_password": false,
 		}
-		user.AccessToken = input.AccessToken
-	}
-	if err := u.db.Create(&user).Error; err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-	return &user, nil
+		if account.Status == types.UserStatusPending {
+			updates["status"] = types.UserStatusActive
+		}
+		if err := tx.Model(&account).Updates(updates).Error; err != nil {
+			return fmt.Errorf("update password: %w", err)
+		}
+		revokedAt := time.Now().UTC()
+		if err := tx.Model(&model.UserSession{}).
+			Where("user_id = ? AND revoked_at IS NULL", account.ID).
+			Update("revoked_at", revokedAt).Error; err != nil {
+			return fmt.Errorf("revoke sessions after password change: %w", err)
+		}
+		return nil
+	})
 }
 
-// UpdateUser updates an existing user's information based on the provided input.
-// Currently it only supports updating the user's access token.
-func (u *UserService) UpdateUser(input *model.User) (*model.User, error) {
-	var user model.User
-	err := u.db.Where("username = ?", input.Username).First(&user).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user with username %s not found: %w", input.Username, apierrors.ErrNotFound)
+func (s *UserService) SetStatus(actorID, userID uint, status types.UserStatus) error {
+	if status != types.UserStatusActive && status != types.UserStatusDisabled {
+		return fmt.Errorf("status must be active or disabled: %w", apierrors.ErrInvalidInput)
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := requireSystemAdmin(tx, actorID); err != nil {
+			return err
 		}
-		return nil, fmt.Errorf("failed to find user: %w", err)
-	}
-
-	if input.AccessToken == "" && input.AllowedServers == nil {
-		return nil, fmt.Errorf("nothing to update: %w", apierrors.ErrInvalidInput)
-	}
-	// validate the user-provided custom access token (if supplied)
-	if input.AccessToken != "" {
-		if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
-			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+		var account model.User
+		if err := tx.First(&account, userID).Error; err != nil {
+			return mapNotFound("user", err)
 		}
-		user.AccessToken = input.AccessToken
-	}
-	if input.AllowedServers != nil {
-		user.AllowedServers = input.AllowedServers
-	}
-
-	err = u.db.Save(&user).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
-	}
-	return &user, nil
+		if status == types.UserStatusDisabled && account.Role == types.UserRoleSystemAdmin && account.Status == types.UserStatusActive {
+			if err := ensureAnotherActiveSystemAdmin(tx, account.ID); err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&account).Update("status", status).Error; err != nil {
+			return fmt.Errorf("update user status: %w", err)
+		}
+		if status == types.UserStatusDisabled {
+			now := time.Now().UTC()
+			if err := tx.Model(&model.UserSession{}).Where("user_id = ? AND revoked_at IS NULL", userID).Update("revoked_at", now).Error; err != nil {
+				return fmt.Errorf("revoke user sessions: %w", err)
+			}
+			if err := tx.Model(&model.DeviceToken{}).Where("user_id = ? AND revoked_at IS NULL", userID).Update("revoked_at", now).Error; err != nil {
+				return fmt.Errorf("revoke device tokens: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
-// ListUsers retrieves all users from the database.
-func (u *UserService) ListUsers() ([]model.User, error) {
-	var users []model.User
-	if err := u.db.Find(&users).Error; err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
-	}
-	return users, nil
+func (s *UserService) UpdateRole(actorID, userID uint, role types.UserRole) error {
+	_, err := s.UpdateUser(actorID, userID, UpdateUserInput{Role: &role})
+	return err
 }
 
-// DeleteUser removes a user with the specified username from the database.
-// If a user's role is admin, the deletion will be rejected.
-func (u *UserService) DeleteUser(username string) error {
-	var user model.User
-	err := u.db.Where("username = ?", username).First(&user).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("user with username %s not found: %w", username, apierrors.ErrNotFound)
+func (s *UserService) UpdateDisplayName(actorID, userID uint, displayName string) error {
+	_, err := s.UpdateUser(actorID, userID, UpdateUserInput{DisplayName: &displayName})
+	return err
+}
+
+// UpdateUser validates and applies all requested profile and role changes in a
+// single transaction so a rejected role change cannot leave a partial update.
+func (s *UserService) UpdateUser(actorID, userID uint, input UpdateUserInput) (*model.User, error) {
+	var updated model.User
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := requireSystemAdmin(tx, actorID); err != nil {
+			return err
 		}
-		return fmt.Errorf("failed to find user: %w", err)
-	}
-
-	if user.Role == types.UserRoleAdmin {
-		return fmt.Errorf("cannot delete an admin user: %w", apierrors.ErrInvalidInput)
-	}
-
-	err = u.db.Unscoped().Where("username = ?", username).Delete(&model.User{}).Error
+		var account model.User
+		if err := tx.First(&account, userID).Error; err != nil {
+			return mapNotFound("user", err)
+		}
+		updates := map[string]any{}
+		if input.DisplayName != nil {
+			displayName := strings.TrimSpace(*input.DisplayName)
+			if displayName == "" {
+				return fmt.Errorf("display name is required: %w", apierrors.ErrInvalidInput)
+			}
+			updates["display_name"] = displayName
+		}
+		if input.Role != nil {
+			if !types.IsValidUserRole(*input.Role) {
+				return fmt.Errorf("invalid user role: %w", apierrors.ErrInvalidInput)
+			}
+			if account.Role == types.UserRoleSystemAdmin && *input.Role != types.UserRoleSystemAdmin && account.Status == types.UserStatusActive {
+				if err := ensureAnotherActiveSystemAdmin(tx, account.ID); err != nil {
+					return err
+				}
+			}
+			updates["role"] = *input.Role
+		}
+		if len(updates) == 0 {
+			return fmt.Errorf("nothing to update: %w", apierrors.ErrInvalidInput)
+		}
+		if err := tx.Model(&account).Updates(updates).Error; err != nil {
+			return fmt.Errorf("update user: %w", err)
+		}
+		return tx.First(&updated, account.ID).Error
+	})
 	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
+		return nil, err
+	}
+	return &updated, nil
+}
+
+func (s *UserService) GetUserByID(id uint) (*model.User, error) {
+	var account model.User
+	if err := s.db.First(&account, id).Error; err != nil {
+		return nil, mapNotFound("user", err)
+	}
+	return &account, nil
+}
+
+func (s *UserService) GetUserByUsername(username string) (*model.User, error) {
+	var account model.User
+	if err := s.db.Where("username = ?", strings.TrimSpace(username)).First(&account).Error; err != nil {
+		return nil, mapNotFound("user", err)
+	}
+	return &account, nil
+}
+
+func (s *UserService) ListUsers() ([]model.User, error) {
+	var accounts []model.User
+	if err := s.db.Order("username").Find(&accounts).Error; err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	return accounts, nil
+}
+
+func validatePassword(password string) error {
+	if len(password) < minimumPasswordLength {
+		return fmt.Errorf("password must contain at least %d characters: %w", minimumPasswordLength, apierrors.ErrInvalidInput)
 	}
 	return nil
 }
 
-// UserCallStatView is one row of per-user per-server call counts for the stats page.
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	return string(hash), nil
+}
+
+func requireSystemAdmin(tx *gorm.DB, userID uint) error {
+	var actor model.User
+	if err := tx.First(&actor, userID).Error; err != nil {
+		return mapNotFound("actor", err)
+	}
+	if actor.Status != types.UserStatusActive || actor.Role != types.UserRoleSystemAdmin {
+		return fmt.Errorf("system administrator required: %w", apierrors.ErrInvalidInput)
+	}
+	return nil
+}
+
+func ensureAnotherActiveSystemAdmin(tx *gorm.DB, excludedID uint) error {
+	var count int64
+	if err := tx.Model(&model.User{}).
+		Where("role = ? AND status = ? AND id <> ?", types.UserRoleSystemAdmin, types.UserStatusActive, excludedID).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("count system administrators: %w", err)
+	}
+	if count == 0 {
+		return fmt.Errorf("cannot disable or demote the last active system administrator: %w", apierrors.ErrInvalidInput)
+	}
+	return nil
+}
+
+func mapNotFound(resource string, err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("%s not found: %w", resource, apierrors.ErrNotFound)
+	}
+	return fmt.Errorf("load %s: %w", resource, err)
+}
+
+// UserCallStatView is retained as a read model until the observability phase
+// replaces the current daily aggregate table with immutable call events.
 type UserCallStatView struct {
 	Username   string `json:"username"`
 	ServerName string `json:"server_name"`
@@ -217,17 +325,16 @@ type UserCallStatView struct {
 	Count      uint64 `json:"count"`
 }
 
-// ListCallStats returns per-user per-server per-day MCP call counts, joined with usernames.
-func (u *UserService) ListCallStats() ([]UserCallStatView, error) {
+func (s *UserService) ListCallStats() ([]UserCallStatView, error) {
 	var rows []UserCallStatView
-	err := u.db.Table("user_call_stats").
+	err := s.db.Table("user_call_stats").
 		Select("users.username AS username, user_call_stats.server_name AS server_name, user_call_stats.date AS date, user_call_stats.count AS count").
 		Joins("LEFT JOIN users ON users.id = user_call_stats.user_id").
 		Where("users.deleted_at IS NULL").
 		Order("user_call_stats.date DESC, users.username, user_call_stats.server_name").
 		Scan(&rows).Error
 	if err != nil {
-		return nil, fmt.Errorf("failed to load call stats: %w", err)
+		return nil, fmt.Errorf("load call stats: %w", err)
 	}
 	return rows, nil
 }

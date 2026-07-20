@@ -7,8 +7,11 @@ import { extractError } from "../api/client";
 import type { DashboardTool, DashboardToolsResponse } from "../types";
 import EmptyStateCard from "../components/EmptyStateCard";
 import JsonViewer from "../components/JsonViewer";
+import { useAuth } from "../store/auth";
 
 export default function ToolsPage() {
+  const { user } = useAuth();
+  const canManage = user?.role === "system_admin";
   const [data, setData] = useState<DashboardToolsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -67,15 +70,15 @@ export default function ToolsPage() {
       title: "启用",
       dataIndex: "enabled",
       render: (enabled: boolean, row) =>
-        row.server_enabled ? (
+        row.server_enabled && canManage ? (
           <Switch
             checked={enabled}
             loading={toggling === row.canonical_name}
             onChange={(c) => toggle(row, c)}
           />
         ) : (
-          <Tooltip title="所属服务器已禁用">
-            <Switch checked={false} disabled />
+          <Tooltip title={row.server_enabled ? "当前账号只有查看权限" : "所属服务器已禁用"}>
+            <Switch checked={row.server_enabled && enabled} disabled />
           </Tooltip>
         ),
     },

@@ -15,20 +15,13 @@ Mcpjungle supports OAuth flows for upstream HTTP MCP server registration, but wi
 - the OAuth grant is gateway-scoped, not per downstream user
 - the primary workflow is registration-time authorization
 
-## OAuth, SSO and OIDC for downstream clients
+## Downstream identity and SSO
 
-Mcpjungle also does not yet support OAuth, single sign-on, or OpenID Connect for downstream clients connecting to the Mcpjungle gateway itself.
+Mcpjungle does not yet support OAuth, single sign-on, or OpenID Connect for downstream human sign-in or MCP client identity management.
 
-Today, the supported model for downstream client authentication is a static access token.
+Human users sign in with username and password through the Dashboard and receive an HttpOnly `mcpj_session` cookie. MCP clients authenticate with personal device tokens in the `Authorization: Bearer` header.
 
-Clients can use either:
-
-- auto-generated tokens created by Mcpjungle
-- custom tokens supplied by operators
-
-If you want stronger external control over token lifecycle, you can manage custom tokens outside Mcpjungle using tools such as Vault or AWS KMS and then supply those tokens to Mcpjungle clients.
-
-We're working on adding support for these in the coming months.
+If you need federated identity for human users or external lifecycle control for device tokens, you still need to manage that surrounding identity system outside Mcpjungle.
 
 ## Prompts & Resources in Tool Groups
 

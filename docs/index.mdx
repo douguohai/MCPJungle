@@ -63,7 +63,7 @@ Mcpjungle gives you a single control point:
     Expose curated subsets of tools so each client only sees the tools it actually needs.
   </Card>
   <Card title="Access Control" icon="shield-halved" href="/governance/access-control">
-    In enterprise mode, issue per-client tokens and explicitly control which MCP servers each client can reach.
+    In enterprise mode, create personal device tokens and assign permission groups so each client only reaches the servers it should use.
   </Card>
 </CardGroup>
 
@@ -75,7 +75,7 @@ Start with a local setup. Scale to a shared team gateway when you need it.
 
 <Steps>
   <Step title="Start the server">
-    Pull the Docker Compose file and start Mcpjungle with a persistent Postgres database:
+    Pull the Docker Compose file and start Mcpjungle with a persistent MySQL 8.0 database:
 
     ```bash
     curl -O https://raw.githubusercontent.com/mcpjungle/MCPJungle/refs/heads/main/docker-compose.yaml
@@ -98,7 +98,7 @@ Start with a local setup. Scale to a shared team gateway when you need it.
     Run Mcpjungle in local or enterprise mode with the right database, runtime, and observability setup.
   </Card>
   <Card title="Access and governance" icon="lock" href="/governance/overview">
-    Understand enterprise mode, upstream authentication, client tokens, and user access.
+    Understand enterprise mode, dashboard-based users, personal device tokens, and permission groups.
   </Card>
   <Card title="Reference" icon="terminal" href="/reference/cli-overview">
     Use the CLI, HTTP API, config files, and environment variables with exact command and schema details.

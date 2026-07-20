@@ -320,10 +320,7 @@ func TestMCPProxyResourceHandlerEnterpriseRejectsUnauthorizedClient(t *testing.T
 	req := mcp.ReadResourceRequest{}
 	req.Params.URI = buildResourceURI("test-server", "resource://test/status")
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "scoped-client",
-		AllowList: model.JSON(`["other-server"]`),
-	})
+	ctx = WithAccessContext(ctx, AccessContext{UserID: 1, DeviceTokenID: 1, EffectiveServerNames: map[string]struct{}{"other-server": {}}})
 
 	_, err := service.mcpProxyResourceHandler(ctx, req)
 	require.Error(t, err)
@@ -392,10 +389,7 @@ func TestMCPProxyResourceHandlerEnterpriseAllowsAuthorizedClient(t *testing.T) {
 	req := mcp.ReadResourceRequest{}
 	req.Params.URI = buildResourceURI("test-server", "resource://test/status")
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "scoped-client",
-		AllowList: model.JSON(`["test-server"]`),
-	})
+	ctx = WithAccessContext(ctx, AccessContext{UserID: 1, DeviceTokenID: 1, EffectiveServerNames: map[string]struct{}{"test-server": {}}})
 
 	contents, err := service.mcpProxyResourceHandler(ctx, req)
 	require.NoError(t, err)

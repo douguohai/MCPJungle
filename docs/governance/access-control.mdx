@@ -1,49 +1,22 @@
 ---
 title: "Control MCP client access"
-description: "Create MCP client identities in enterprise mode and give each one explicit access only to the upstream MCP servers it should be allowed to use."
+description: "Create personal device tokens in the Dashboard and assign permission groups so each client can only reach the servers it should use."
 ---
 
 In development mode, every MCP client connected to the gateway can access all registered servers.
 
-In enterprise mode, that is no longer true. No MCP client can access any registered server until you create a client identity and give it an allow-list.
+In enterprise mode, access control is split between permission groups and personal device tokens.
 
-## Create an MCP client
+The legacy `mcpjungle create mcp-client`, `--allow`, and `--access-token` CLI workflows are no longer supported.
 
-Use `create mcp-client` and specify the servers it should be allowed to access:
+## How access works
 
-```bash
-mcpjungle create mcp-client cursor-local --allow "calculator, github"
-```
+1. An administrator creates or updates a user in the Dashboard.
+2. The administrator assigns the user to the permission groups that match the required upstream MCP servers.
+3. The user creates a personal device token in the Dashboard for each device or client.
+4. The client sends that token in the `Authorization: Bearer` header.
 
-Mcpjungle prints the generated access token once:
-
-```text
-MCP client 'cursor-local' created successfully!
-Servers accessible: calculator,github
-
-Access token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
-Send this token in the `Authorization: Bearer {token}` HTTP header.
-```
-
-<Note>
-  If you omit `--allow`, the client is created but cannot access any registered servers.
-</Note>
-
-<Tip>
-  You can use `--allow "*"` to give an MCP client access to all registered MCP servers.
-
-  ```bash
-  mcpjungle create mcp-client cursor-local --allow "*"
-  ```
-
-  This is highly discouraged in production environments. Prefer explicit allow-lists so each client only gets access to the servers it actually needs.
-</Tip>
-
-## Use the token from an MCP client
-
-Your MCP client or bridge must send the token in the `Authorization` header.
-
-Example for Cursor:
+Example for Cursor or any other MCP bridge:
 
 ```json
 {
@@ -51,94 +24,38 @@ Example for Cursor:
     "mcpjungle": {
       "url": "http://localhost:8080/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_ACCESS_TOKEN"
+        "Authorization": "Bearer YOUR_DEVICE_TOKEN"
       }
     }
   }
 }
 ```
 
-Example for Claude via `mcp-remote`:
+<Note>
+  Device tokens are not login credentials. They only authorize MCP client requests to the gateway.
+</Note>
 
-```json
-{
-  "mcpServers": {
-    "mcpjungle": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "http://localhost:8080/mcp",
-        "--allow-http",
-        "--header",
-        "Authorization: Bearer YOUR_ACCESS_TOKEN"
-      ]
-    }
-  }
-}
-```
+## Rotate or revoke access
 
-## Custom access tokens
-
-If you want to supply your own token instead of using a generated one:
-
-```bash
-mcpjungle create mcp-client cursor-local --allow "calculator, github" --access-token my_custom_token
-```
-
-This is useful when tokens are issued or tracked externally. For example, you might be managing identities and tokens through Vault or AWS KMS.
-
-## Create a client from a config file
-
-```json
-{
-  "name": "cursor-local",
-  "allowed_servers": ["calculator", "github"],
-  "access_token": "my_secret_token_123",
-  "access_token_ref": {
-    "file": "/path/to/token-file.txt",
-    "env": "ENV_VAR_NAME"
-  }
-}
-```
-
-Create it with:
-
-```bash
-mcpjungle create mcp-client --conf ./cursor-local.json
-```
+If a token is leaked or a device is retired, revoke that token in the Dashboard and create a replacement if needed.
 
 <Warning>
-  When creating an MCP client from a config file, you must provide a token explicitly. Mcpjungle cannot print an auto-generated token back through the file-based workflow.
+  Do not reuse one device token across multiple tools or team members. Issue one token per device or workflow so rotation stays manageable.
 </Warning>
-
-See the [configuration file reference](/reference/config-file#token-supply-strategies) for the supported ways to supply a custom token in config files.
-
-## Recommended pattern
-
-For shared environments, create one MCP client per integration or workflow, not one shared token for everything.
-
-Examples:
-
-- one client for Cursor
-- one for Claude Desktop via `mcp-remote`
-- one for Copilot
-- one per internal agent or service
-
-That keeps access explicit and rotation manageable.
 
 ## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Governance overview" icon="lock" href="/governance/overview">
-    Understand how enterprise mode changes the operating model.
-  </Card>
   <Card title="Clients and users" icon="users" href="/governance/clients-and-users">
-    Manage machine identities and human user accounts separately.
+    Learn how users sign in, activate accounts, and get personal device tokens.
   </Card>
-  <Card title="Production deployment" icon="cloud" href="/deployment/production">
-    Run Mcpjungle in enterprise mode and initialize it correctly.
+  <Card title="Governance overview" icon="lock" href="/governance/overview">
+    Review the enterprise model and where Dashboard-based management fits.
   </Card>
-  <Card title="Integrations" icon="plug" href="/integrations/cursor">
-    See how to apply client tokens in Cursor, Claude, and Copilot configs.
+  <Card title="Config file reference" icon="file-code" href="/reference/config-file">
+    See the config files that remain supported for server registration and tool groups.
+  </Card>
+  <Card title="Limitations" icon="triangle-exclamation" href="/limitations">
+    Check the current downstream auth and SSO gaps.
   </Card>
 </CardGroup>

@@ -1,17 +1,25 @@
-import { http } from "./client";
-import type { LoginResponse, VerifyTokenResponse } from "../types";
+import { accessHttp, http } from "./client";
+import type { AuthUser, LoginResponse, VerifyTokenResponse } from "../types";
 
 export const authApi = {
-  // login exchanges username+password for a short-lived session JWT.
   login: (username: string, password: string) =>
-    http
+    accessHttp
       .post<LoginResponse>("/auth/login", { username, password })
       .then((r) => r.data),
-
-  // verify checks whether a token is still valid. Used by App bootstrap to
-  // detect dev mode (no token required) and kept for legacy-token compatibility.
-  verify: (accessToken: string) =>
+  logout: () => accessHttp.post("/auth/logout"),
+  me: () =>
+    accessHttp
+      .get<{ user: AuthUser }>("/auth/me")
+      .then((r) => r.data.user),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    accessHttp
+      .put<{ user: AuthUser }>("/auth/password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      })
+      .then((r) => r.data.user),
+  verifyDashboardMode: () =>
     http
-      .post<VerifyTokenResponse>("/auth/verify", { access_token: accessToken })
+      .post<VerifyTokenResponse>("/auth/verify", {})
       .then((r) => r.data),
 };

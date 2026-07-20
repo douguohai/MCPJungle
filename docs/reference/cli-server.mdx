@@ -21,50 +21,40 @@ The server listens on port `8080` by default and exposes the MCP proxy at `/mcp`
   TCP port to bind the HTTP server to. Overrides the `PORT` environment variable. Defaults to `8080`.
 </ParamField>
 
-<ParamField body="--sqlite-db-path" type="string">
-  Optional path to a custom SQLite database file to use when PostgreSQL is not configured. If not provided, MCPJungle defaults to `./mcpjungle.db`. Overrides the `SQLITE_DB_PATH` environment variable.
-</ParamField>
-
 <ParamField body="--enterprise" type="boolean" default="false">
   Start the server in enterprise mode, which enables access control, authenticated clients, and user management. Equivalent to setting `SERVER_MODE=enterprise`. When using this flag on a fresh database, the server will print a reminder to run `init-server` before it can be used.
 </ParamField>
 
 ### Environment variables
 
-The `start` command reads environment variables for server mode, database configuration, timeouts, and telemetry. A `.env` file in the working directory is loaded automatically if present.
+The `start` command reads environment variables for server mode, database configuration, timeouts, and telemetry. `DATABASE_URL` is required and must point to a MySQL 8.0 database configured for UTC and `utf8mb4`. A `.env` file in the working directory is loaded automatically if present.
 
-For the complete list, defaults, and `_FILE` variants, see [Environment variables](/reference/environment-variables).
+For the complete list and defaults, see [Environment variables](/reference/environment-variables).
 
 ### Examples
 
 Start in development mode (default):
 
 ```bash
-mcpjungle start
+DATABASE_URL=mysql://user:pass@host:3306/db mcpjungle start
 ```
 
 Start on a custom port:
 
 ```bash
-mcpjungle start --port 9000
-```
-
-Start with a custom SQLite file:
-
-```bash
-mcpjungle start --sqlite-db-path /path/to/mcpjungle.db
+DATABASE_URL=mysql://user:pass@host:3306/db mcpjungle start --port 9000
 ```
 
 Start in enterprise mode:
 
 ```bash
-mcpjungle start --enterprise
+DATABASE_URL=mysql://user:pass@host:3306/db mcpjungle start --enterprise
 ```
 
-Start with a Postgres database:
+Start with MySQL 8.0:
 
 ```bash
-DATABASE_URL="postgres://user:password@localhost:5432/mcpjungle" mcpjungle start
+DATABASE_URL=mysql://user:pass@host:3306/db mcpjungle start
 ```
 
 ---

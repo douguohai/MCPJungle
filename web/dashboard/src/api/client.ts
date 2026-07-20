@@ -1,37 +1,31 @@
 import axios, { type AxiosError } from "axios";
-import { clearToken, getToken, isDevSession } from "../store/auth";
 
 export const http = axios.create({
   baseURL: "/api/dashboard",
+  withCredentials: true,
   // Server registration/diagnostics can take a while (the backend probes
   // upstreams synchronously); 60s avoids cutting those off mid-flight.
   timeout: 60000,
 });
 
-// Attach the access token (when not in a dev session) to every request.
-http.interceptors.request.use((config) => {
-  if (!isDevSession()) {
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
+export const accessHttp = axios.create({
+  baseURL: "/api/v1",
+  withCredentials: true,
+  timeout: 60000,
 });
 
-// On 401, clear the stored session and bounce to the login page.
-http.interceptors.response.use(
-  (resp) => resp,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      clearToken();
-      if (!window.location.pathname.endsWith("/login")) {
-        window.location.href = "/login";
-      }
-    }
-    return Promise.reject(error);
-  },
-);
+function redirectOnExpiredSession(error: AxiosError) {
+  const requestURL = error.config?.url ?? "";
+  const credentialCheck =
+    requestURL.endsWith("/auth/login") || requestURL.endsWith("/auth/password");
+  if (error.response?.status === 401 && !credentialCheck) {
+    window.dispatchEvent(new Event("mcpjungle:session-expired"));
+  }
+  return Promise.reject(error);
+}
+
+http.interceptors.response.use((resp) => resp, redirectOnExpiredSession);
+accessHttp.interceptors.response.use((resp) => resp, redirectOnExpiredSession);
 
 // Extract a human-readable message from an axios error, preferring the backend
 // `{ error: "..." }` payload.

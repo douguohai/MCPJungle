@@ -136,7 +136,7 @@ func Execute() error {
 			u = registryServerURL
 		}
 
-		apiClient = client.NewClient(u, cfg.AccessToken, http.DefaultClient)
+		apiClient = client.NewClient(u, "", http.DefaultClient)
 	}
 
 	return rootCmd.Execute()

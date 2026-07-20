@@ -1,145 +1,214 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Button, Popconfirm, Modal, Form, Input, Select, Typography, Tag, message } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Spin,
+  Switch,
+  Table,
+  Tag,
+  Typography,
+  message,
+} from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { usersApi } from "../api/users";
-import { serversApi } from "../api/servers";
 import { extractError } from "../api/client";
-import type { UserListItem, DashboardServer } from "../types";
+import type { UserAccount, UserRole, UserStatus } from "../types";
+
+const roleOptions: Array<{ value: UserRole; label: string }> = [
+  { value: "system_admin", label: "系统管理员" },
+  { value: "service_admin", label: "服务管理员" },
+  { value: "member", label: "成员" },
+  { value: "auditor", label: "审计员" },
+];
+
+const roleLabels = Object.fromEntries(
+  roleOptions.map((option) => [option.value, option.label]),
+) as Record<UserRole, string>;
+
+const statusMeta: Record<UserStatus, { label: string; color: string }> = {
+  pending: { label: "待首次登录", color: "gold" },
+  active: { label: "已启用", color: "green" },
+  disabled: { label: "已禁用", color: "default" },
+};
 
 export default function UsersPage() {
-  const [data, setData] = useState<UserListItem[]>([]);
-  const [servers, setServers] = useState<DashboardServer[]>([]);
-  const [error, setError] = useState("");
+  const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<UserListItem | null>(null);
-  const [created, setCreated] = useState<{ username: string; token: string } | null>(null);
+  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<UserAccount | null>(null);
+  const [initialCredential, setInitialCredential] = useState<{
+    username: string;
+    password: string;
+  } | null>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    Promise.all([usersApi.list(), serversApi.list()])
-      .then(([us, ss]) => {
-        setData(us);
-        setServers(ss.servers ?? []);
-        setError("");
-      })
-      .catch((e) => setError(extractError(e)))
-      .finally(() => setLoading(false));
+    try {
+      setAccounts(await usersApi.list());
+      setError("");
+    } catch (loadError) {
+      setError(extractError(loadError));
+    } finally {
+      setLoading(false);
+    }
   };
+
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
-  if (loading && !data.length) return <Spin />;
-  if (error) return <Alert type="error" message={error} />;
-
-  const onCreate = async (values: { username: string }) => {
+  const create = async (values: {
+    username: string;
+    display_name?: string;
+    role: UserRole;
+  }) => {
     setSubmitting(true);
     try {
-      const resp = await usersApi.create({ username: values.username.trim() });
-      message.success(`已创建用户 ${resp.username}`);
-      setCreated({ username: resp.username, token: resp.access_token });
+      const result = await usersApi.create({
+        username: values.username.trim(),
+        display_name: values.display_name?.trim(),
+        role: values.role,
+      });
       setCreateOpen(false);
       createForm.resetFields();
-      load();
-    } catch (e) {
-      message.error(extractError(e));
+      setInitialCredential({
+        username: result.user.username,
+        password: result.initial_password,
+      });
+      await load();
+    } catch (createError) {
+      message.error(extractError(createError));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const onEdit = async (values: { allowed_servers?: string[] }) => {
-    if (!editTarget) return;
+  const update = async (values: { display_name: string; role: UserRole }) => {
+    if (!editing) return;
     setSubmitting(true);
     try {
-      await usersApi.update(editTarget.username, { allowed_servers: values.allowed_servers ?? [] });
-      message.success(`已更新 ${editTarget.username} 的可访问服务器`);
-      setEditTarget(null);
-      load();
-    } catch (e) {
-      message.error(extractError(e));
+      await usersApi.update(editing.ID, {
+        display_name: values.display_name.trim(),
+        role: values.role,
+      });
+      message.success("用户信息已更新");
+      setEditing(null);
+      await load();
+    } catch (updateError) {
+      message.error(extractError(updateError));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const remove = async (username: string) => {
+  const toggle = async (account: UserAccount, enabled: boolean) => {
     try {
-      await usersApi.remove(username);
-      message.success(`已删除用户 ${username}`);
-      load();
-    } catch (e) {
-      message.error(extractError(e));
+      await usersApi.setEnabled(account.ID, enabled);
+      message.success(`${account.username} 已${enabled ? "启用" : "禁用"}`);
+      await load();
+    } catch (toggleError) {
+      message.error(extractError(toggleError));
     }
   };
 
-  const allowOptions = [
-    { value: "*", label: "* （全部服务器）" },
-    ...servers.map((s) => ({ value: s.name, label: s.name })),
-  ];
-
-  const columns: ColumnsType<UserListItem> = [
-    { title: "用户名", dataIndex: "username" },
-    { title: "角色", dataIndex: "role" },
+  const columns: ColumnsType<UserAccount> = [
     {
-      title: "可访问的服务器",
-      dataIndex: "allowed_servers",
-      render: (list?: string[] | null) =>
-        !list || list.length === 0 ? (
-          <Typography.Text type="secondary">全部</Typography.Text>
-        ) : (
-          list.map((s) => <Tag key={s}>{s}</Tag>)
-        ),
+      title: "用户",
+      key: "identity",
+      render: (_, account) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{account.display_name || account.username}</Typography.Text>
+          <Typography.Text type="secondary">{account.username}</Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: "角色",
+      dataIndex: "role",
+      render: (role: UserRole) => roleLabels[role] ?? role,
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      render: (status: UserStatus, account) => (
+        <Space>
+          <Tag color={statusMeta[status]?.color}>{statusMeta[status]?.label ?? status}</Tag>
+          {account.must_change_password && <Tag color="orange">需改密码</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: "最近登录",
+      dataIndex: "last_login_at",
+      render: (value?: string) =>
+        value ? new Date(value).toLocaleString("zh-CN") : "尚未登录",
     },
     {
       title: "操作",
       key: "actions",
-      render: (_, row) => (
-        <>
+      render: (_, account) => (
+        <Space>
           <Button
             size="small"
             onClick={() => {
-              setEditTarget(row);
-              editForm.setFieldsValue({ allowed_servers: row.allowed_servers ?? [] });
+              setEditing(account);
+              editForm.setFieldsValue({
+                display_name: account.display_name,
+                role: account.role,
+              });
             }}
           >
-            配置授权
-          </Button>{" "}
-          {row.role !== "admin" && (
-            <Popconfirm title={`确认删除用户 ${row.username}？`} onConfirm={() => remove(row.username)}>
-              <Button danger size="small">
-                删除
-              </Button>
-            </Popconfirm>
-          )}
-        </>
+            编辑
+          </Button>
+          <Switch
+            checked={account.status === "active"}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+            onChange={(enabled) => void toggle(account, enabled)}
+          />
+        </Space>
       ),
     },
   ];
 
+  if (loading && accounts.length === 0) return <Spin />;
+
   return (
     <>
       <Card
-        title="用户"
+        title="内部用户"
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            新建用户
+            创建用户
           </Button>
         }
       >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          用户是可以登录 dashboard 和使用 CLI 的账号。管理员（admin）可管理一切；普通用户（user）只能查看和调用工具。「可访问的服务器」限制该用户（及其所有客户端）最多能用哪些 MCP 服务器——留空表示全部。
+        <Typography.Paragraph type="secondary">
+          新用户以待激活状态创建。系统只展示一次初始密码，用户首次登录并修改密码后才会激活。
         </Typography.Paragraph>
-        <Table rowKey="username" dataSource={data} columns={columns} loading={loading} pagination={{ pageSize: 20 }} />
+        {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+        <Table
+          rowKey="ID"
+          dataSource={accounts}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+        />
       </Card>
 
       <Modal
-        title="新建用户"
+        title="创建内部用户"
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -148,46 +217,65 @@ export default function UsersPage() {
         cancelText="取消"
         destroyOnClose
       >
-        <Form form={createForm} layout="vertical" onFinish={onCreate}>
-          <Form.Item name="username" label="用户名" rules={[{ required: true, message: "请输入用户名" }]}>
-            <Input placeholder="例如 alice" />
+        <Form
+          form={createForm}
+          layout="vertical"
+          initialValues={{ role: "member" }}
+          onFinish={create}
+        >
+          <Form.Item name="username" label="登录名" rules={[{ required: true, message: "请输入登录名" }]}>
+            <Input placeholder="例如 alice" autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="display_name" label="显示名称">
+            <Input placeholder="例如 张三" />
+          </Form.Item>
+          <Form.Item name="role" label="角色" rules={[{ required: true }]}>
+            <Select options={roleOptions} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title={`配置授权：${editTarget?.username}`}
-        open={!!editTarget}
-        onCancel={() => setEditTarget(null)}
+        title={`编辑用户：${editing?.username ?? ""}`}
+        open={!!editing}
+        onCancel={() => setEditing(null)}
         onOk={() => editForm.submit()}
         confirmLoading={submitting}
         okText="保存"
         cancelText="取消"
       >
-        <Form form={editForm} layout="vertical" onFinish={onEdit}>
-          <Form.Item
-            name="allowed_servers"
-            label="可访问的服务器"
-            tooltip="选择该用户能用哪些 MCP 服务器。* 或留空 = 全部。列表来自已注册服务器，可在「MCP 服务器」页注册新的。"
-          >
-            <Select mode="multiple" placeholder="选择允许访问的服务器（留空=全部）" options={allowOptions} allowClear />
+        <Form form={editForm} layout="vertical" onFinish={update}>
+          <Form.Item name="display_name" label="显示名称" rules={[{ required: true, message: "请输入显示名称" }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="role" label="角色" rules={[{ required: true }]}>
+            <Select options={roleOptions} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="用户访问令牌（仅显示这一次）"
-        open={!!created}
-        onCancel={() => setCreated(null)}
+        title="一次性初始密码"
+        open={!!initialCredential}
+        closable={false}
+        maskClosable={false}
         footer={
-          <Button type="primary" onClick={() => setCreated(null)}>
-            我已保存
+          <Button type="primary" onClick={() => setInitialCredential(null)}>
+            我已安全保存
           </Button>
         }
       >
-        <Alert type="warning" showIcon message="此令牌只显示一次，请立即复制并交给该用户。" style={{ marginBottom: 12 }} />
-        <Typography.Paragraph code copyable>
-          {created?.token}
+        <Alert
+          type="warning"
+          showIcon
+          message="关闭后无法再次查看，请通过安全渠道交给用户。"
+          style={{ marginBottom: 16 }}
+        />
+        <Typography.Paragraph>
+          用户名：<Typography.Text code copyable>{initialCredential?.username}</Typography.Text>
+        </Typography.Paragraph>
+        <Typography.Paragraph>
+          初始密码：<Typography.Text code copyable>{initialCredential?.password}</Typography.Text>
         </Typography.Paragraph>
       </Modal>
     </>

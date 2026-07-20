@@ -257,52 +257,21 @@ The recommended way to stop the server process is to send a `SIGTERM` signal to 
 
 
 ### Database
-The mcpjungle server relies on a database and by default, creates a SQLite DB file `mcpjungle.db` in the current working directory.
-
-This is okay when you're just testing things out locally.
-
-If you do not provide PostgreSQL configuration or a custom SQLite path, mcpjungle uses `./mcpjungle.db`.
-
-You can optionally set a custom file path for the SQLite DB file:
+MCPJungle requires MySQL 8.0. The connection uses UTC, `utf8mb4`, and strict MySQL date handling in every environment.
 
 ```bash
-mcpjungle start --sqlite-db-path ./.mcpjungle.db
-
-# or
-export SQLITE_DB_PATH=/path/to/.mcpjungle.db
+export DATABASE_URL='mysql://mcpjungle:change-me@127.0.0.1:3306/mcpjungle'
 mcpjungle start
 ```
 
-NOTE: Deleting that SQLite file removes all registered server data and other MCPJungle state stored in it.
-
-For more serious deployments, mcpjungle also supports Postgresql. You can supply the DSN to connect to it:
+You can also use individual MySQL variables. `MYSQL_USER`, `MYSQL_PASSWORD`, and `MYSQL_DB` support matching `_FILE` variables for mounted secrets.
 
 ```bash
-# You can supply the database DSN as an env var
-export DATABASE_URL=postgres://admin:root@localhost:5432/mcpjungle_db
-
-#run as container
-docker run ghcr.io/mcpjungle/mcpjungle:latest
-
-# or run directly
-mcpjungle start
-```
-
-You can also supply postgres-specific env vars or files if you don't prefer using the DSN:
-```bash
-# host is mandatory if you're using postgres-specific env vars
-export POSTGRES_HOST=localhost
-export POSTGRES_PORT=5432
-
-export POSTGRES_USER=admin
-export POSTGRES_USER_FILE=/path/to/user-file
-
-export POSTGRES_PASSWORD=secret
-export POSTGRES_PASSWORD_FILE=/path/to/password-file
-
-export POSTGRES_DB=mcpjungle_db
-export POSTGRES_DB_FILE=/path/to/db-file
-
+export MYSQL_HOST=127.0.0.1
+export MYSQL_PORT=3306
+export MYSQL_USER=mcpjungle
+export MYSQL_PASSWORD=change-me
+export MYSQL_DB=mcpjungle
 mcpjungle start
 ```
 
@@ -860,31 +829,18 @@ You can then use the mcpjungle cli to make authenticated requests to the server.
 
 In `development` mode, all MCP clients have full access to all the MCP servers registered in MCPJungle Proxy.
 
-`enterprise` mode lets you control which MCP clients can access which MCP servers.
+`enterprise` mode moves ongoing management into the Dashboard.
 
-Suppose you have registered 2 MCP servers `calculator` and `github` in MCPJungle in enterprise mode.
+- Human users sign in with a username and password.
+- The first sign-in uses a one-time initial password created by an administrator.
+- MCP clients authenticate with personal device tokens in the `Authorization: Bearer` header.
+- Permission groups control which upstream MCP servers a user and their device tokens can reach.
 
-By default, no MCP client can access these servers. **You must create an MCP Client in mcpjungle and explicitly allow it to access the MCP servers.**
+Admins create pending users in the Dashboard, share the one-time initial password, and let the user activate the account by changing that password on first sign-in. Create one personal device token per MCP client or device, copy it once, and keep it out of source control.
 
-```bash
-# Create a new MCP client for your Cursor IDE to use. It can access the calculator and github MCP servers
-mcpjungle create mcp-client cursor-local --allow "calculator, github"
+The legacy CLI flows for `mcpjungle create mcp-client`, `mcpjungle create user`, `mcpjungle login`, and `--access-token` are no longer supported in enterprise mode.
 
-MCP client 'cursor-local' created successfully!
-Servers accessible: calculator,github
-
-Access token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
-Send this token in the `Authorization: Bearer {token}` HTTP header.
-```
-
-Mcpjungle creates an access token for your client.
-Configure your client or agent to send this token in the `Authorization` header when making requests to the mcpjungle proxy.
-
-> [!TIP]
-> You can also supply a custom access token for your mcp clients and user accounts using the `--access-token` flag.
-> This is useful when you want to manage tokens yourself, perhaps through a central identity server.
-
-For example, you can add the following configuration in Cursor to connect to MCPJungle:
+For example, you can add the following configuration in Cursor to connect to MCPJungle with a device token:
 
 ```json
 {
@@ -892,7 +848,7 @@ For example, you can add the following configuration in Cursor to connect to MCP
     "mcpjungle": {
       "url": "http://localhost:8080/mcp",
       "headers": {
-        "Authorization": "Bearer 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw"
+        "Authorization": "Bearer YOUR_DEVICE_TOKEN"
       }
     }
   }
@@ -901,75 +857,7 @@ For example, you can add the following configuration in Cursor to connect to MCP
 
 A client that has access to a particular server this way can view and call all the tools provided by that server.
 
-> [!NOTE]
-> If you don't specify the `--allow` flag, the MCP client will not be able to access any MCP servers.
-
-#### Creating mcp clients from the config file
-You can also create an MCP client by providing a JSON configuration file:
-```json
-{
-	"name": "foobar",
-	"allowed_servers": ["deepwiki", "time"],
-	"access_token": "my_secret_token_123",
-    "access_token_ref": {
-        "file": "/path/to/token-file.txt",
-        "env": "ENV_VAR_NAME"
-    }
-}
-```
-
-When creating a client from a config file, you **must** provide a custom access token because mcpjungle cannot print the generated token to the console.
-
-#### Supplying custom access tokens in config files
-
-There are 3 ways to provide the access token from configuration file:
-
-1. Directly in the `access_token` field: Only use this for testing purposes. Not recommended for production, especially if you're committing the config file to version control.
-2. From a file using the `access_token_ref.file` field: The file should contain only the token string.
-3. From an environment variable using the `access_token_ref.env` field: The env var should contain the token string.
-
-You can also use `${VAR_NAME}` placeholders elsewhere in the same JSON config file. For example:
-
-```json
-{
-  "name": "${MCP_CLIENT_NAME}",
-  "allowed_servers": ["${PRIMARY_SERVER}", "time"],
-  "access_token_ref": {
-    "env": "CLIENT_TOKEN_ENV_NAME"
-  }
-}
-```
-
-#### Creating user accounts
-In addition to MCP clients, you can also create User accounts in mcpjungle for human users.
-
-A user has a very limited set of privileges compared to an admin in the enterprise mode.
-For example, they can view and use MCP servers, but they don't have write permissions in mcpjungle.
-
-```bash
-# Auto-generates a secret for user
-mcpjungle create user bob
-# Specify a custom access token for user
-mcpjungle create user alice --access-token alice_token_123
-# Create user from config file
-mcpjungle create user --conf /path/to/user-config.json
-```
-
-The config file format for creating a user is similar to that of an MCP client:
-```json
-{
-    "name": "charlie",
-    "access_token": "charlies_secret_token",
-    "access_token_ref": {
-        "file": "/path/to/token-file.txt",
-        "env": "ENV_VAR_NAME"
-    }
-}
-```
-
-Again, when using the config file, you **must** provide a custom access token.
-
-Just like other JSON config files in MCPJungle, user config files also support `${VAR_NAME}` placeholders in string fields.
+The Dashboard is the source of truth for users, device tokens, and permission groups.
 
 ### OpenTelemetry
 MCPJungle supports Prometheus-compatible OpenTelemetry Metrics for observability.

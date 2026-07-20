@@ -116,6 +116,33 @@ func TestSessionManager_GetOrCreateSession(t *testing.T) {
 	_ = mockClientInstance // prevent unused variable warning
 }
 
+func TestSessionManager_IsolatesSessionsByDeviceToken(t *testing.T) {
+	sm := NewSessionManager(&SessionManagerConfig{IdleTimeoutSec: 3600, InitReqTimeoutSec: 10})
+	defer sm.Shutdown()
+
+	created := 0
+	sm.createSessionFunc = func(context.Context, *model.McpServer, int) (*client.Client, error) {
+		created++
+		return nil, nil
+	}
+	server := &model.McpServer{Name: "stateful", Transport: types.TransportStdio, SessionMode: types.SessionModeStateful}
+	first := WithAccessContext(context.Background(), AccessContext{UserID: 1, DeviceTokenID: 11})
+	second := WithAccessContext(context.Background(), AccessContext{UserID: 1, DeviceTokenID: 12})
+
+	_, err := sm.GetOrCreateSession(first, server)
+	require.NoError(t, err)
+	_, err = sm.GetOrCreateSession(first, server)
+	require.NoError(t, err)
+	_, err = sm.GetOrCreateSession(second, server)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, created)
+	assert.Equal(t, 2, sm.SessionCount())
+
+	sm.CloseSession(server.Name)
+	assert.Zero(t, sm.SessionCount())
+}
+
 func TestSessionManager_CloseSession(t *testing.T) {
 	sm := NewSessionManager(&SessionManagerConfig{
 		IdleTimeoutSec:    3600,
@@ -124,7 +151,9 @@ func TestSessionManager_CloseSession(t *testing.T) {
 	defer sm.Shutdown()
 
 	// Manually add a session for testing
-	sm.sessions["test-server"] = &ManagedSession{
+	testKey := SessionKey{ServerName: "test-server"}
+	sm.sessions[testKey] = &ManagedSession{
+		Key:        testKey,
 		ServerName: "test-server",
 		Client:     nil, // nil client for testing
 		CreatedAt:  time.Now(),
@@ -152,13 +181,17 @@ func TestSessionManager_CloseAllSessions(t *testing.T) {
 	defer sm.Shutdown()
 
 	// Add multiple sessions
-	sm.sessions["server1"] = &ManagedSession{
+	server1Key := SessionKey{ServerName: "server1"}
+	server2Key := SessionKey{ServerName: "server2"}
+	sm.sessions[server1Key] = &ManagedSession{
+		Key:        server1Key,
 		ServerName: "server1",
 		Client:     nil,
 		CreatedAt:  time.Now(),
 		LastUsedAt: time.Now(),
 	}
-	sm.sessions["server2"] = &ManagedSession{
+	sm.sessions[server2Key] = &ManagedSession{
+		Key:        server2Key,
 		ServerName: "server2",
 		Client:     nil,
 		CreatedAt:  time.Now(),
@@ -181,7 +214,10 @@ func TestSessionManager_CleanupIdleSessions(t *testing.T) {
 
 	// Add a session that's already expired
 	expiredTime := time.Now().Add(-2 * time.Second)
-	sm.sessions["expired-server"] = &ManagedSession{
+	expiredKey := SessionKey{ServerName: "expired-server"}
+	activeKey := SessionKey{ServerName: "active-server"}
+	sm.sessions[expiredKey] = &ManagedSession{
+		Key:        expiredKey,
 		ServerName: "expired-server",
 		Client:     nil,
 		CreatedAt:  expiredTime,
@@ -189,7 +225,8 @@ func TestSessionManager_CleanupIdleSessions(t *testing.T) {
 	}
 
 	// Add a session that's still active
-	sm.sessions["active-server"] = &ManagedSession{
+	sm.sessions[activeKey] = &ManagedSession{
+		Key:        activeKey,
 		ServerName: "active-server",
 		Client:     nil,
 		CreatedAt:  time.Now(),
@@ -216,7 +253,9 @@ func TestSessionManager_NoCleanupWhenTimeoutZero(t *testing.T) {
 
 	// Add an "old" session
 	oldTime := time.Now().Add(-24 * time.Hour)
-	sm.sessions["old-server"] = &ManagedSession{
+	oldKey := SessionKey{ServerName: "old-server"}
+	sm.sessions[oldKey] = &ManagedSession{
+		Key:        oldKey,
 		ServerName: "old-server",
 		Client:     nil,
 		CreatedAt:  oldTime,
@@ -241,7 +280,9 @@ func TestSessionManager_LastUsedAtUpdated(t *testing.T) {
 
 	// Add a session with old LastUsedAt
 	oldTime := time.Now().Add(-1 * time.Hour)
-	sm.sessions["test-server"] = &ManagedSession{
+	testKey := SessionKey{ServerName: "test-server"}
+	sm.sessions[testKey] = &ManagedSession{
+		Key:        testKey,
 		ServerName: "test-server",
 		Client:     nil,
 		CreatedAt:  oldTime,
@@ -249,7 +290,7 @@ func TestSessionManager_LastUsedAtUpdated(t *testing.T) {
 	}
 
 	sm.mu.Lock()
-	session := sm.sessions["test-server"]
+	session := sm.sessions[testKey]
 	originalLastUsed := session.LastUsedAt
 	sm.mu.Unlock()
 
@@ -298,7 +339,9 @@ func TestSessionManager_InvalidateSession(t *testing.T) {
 	defer sm.Shutdown()
 
 	// Add a session
-	sm.sessions["test-server"] = &ManagedSession{
+	testKey := SessionKey{ServerName: "test-server"}
+	sm.sessions[testKey] = &ManagedSession{
+		Key:        testKey,
 		ServerName: "test-server",
 		Client:     nil,
 		CreatedAt:  time.Now(),
@@ -309,13 +352,13 @@ func TestSessionManager_InvalidateSession(t *testing.T) {
 	assert.True(t, sm.HasSession("test-server"))
 
 	// Invalidate the session
-	sm.InvalidateSession("test-server", "connection reset")
+	sm.InvalidateSession(testKey, "connection reset")
 
 	assert.Equal(t, 0, sm.SessionCount())
 	assert.False(t, sm.HasSession("test-server"))
 
 	// Invalidating non-existent session should not panic
-	sm.InvalidateSession("nonexistent-server", "test reason")
+	sm.InvalidateSession(SessionKey{ServerName: "nonexistent-server"}, "test reason")
 }
 
 func TestSessionResult_InvalidateOnError(t *testing.T) {
@@ -326,7 +369,9 @@ func TestSessionResult_InvalidateOnError(t *testing.T) {
 	defer sm.Shutdown()
 
 	// Add a session for testing
-	sm.sessions["test-server"] = &ManagedSession{
+	testKey := SessionKey{ServerName: "test-server"}
+	sm.sessions[testKey] = &ManagedSession{
+		Key:        testKey,
 		ServerName: "test-server",
 		Client:     nil,
 		CreatedAt:  time.Now(),
@@ -380,7 +425,8 @@ func TestSessionResult_InvalidateOnError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset session for each test
-			sm.sessions["test-server"] = &ManagedSession{
+			sm.sessions[testKey] = &ManagedSession{
+				Key:        testKey,
 				ServerName: "test-server",
 				Client:     nil,
 				CreatedAt:  time.Now(),
@@ -390,7 +436,7 @@ func TestSessionResult_InvalidateOnError(t *testing.T) {
 			sr := &sessionResult{
 				client:         nil,
 				shouldClose:    tt.shouldClose,
-				serverName:     "test-server",
+				sessionKey:     testKey,
 				sessionManager: tt.sessionManager,
 			}
 

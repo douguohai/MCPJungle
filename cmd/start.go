@@ -17,14 +17,15 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/api"
-	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/db"
 	"github.com/mcpjungle/mcpjungle/internal/migrations"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
+	"github.com/mcpjungle/mcpjungle/internal/service/session"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -67,7 +68,6 @@ const (
 var (
 	startServerCmdBindPort          string
 	startServerCmdEnterpriseEnabled bool
-	startServerCmdProdEnabled       bool
 )
 
 var startServerCmd = &cobra.Command{
@@ -108,13 +108,6 @@ func init() {
 			ServerModeEnvVar, model.ModeDev, model.ModeEnterprise,
 		),
 	)
-	startServerCmd.Flags().BoolVar(
-		&startServerCmdProdEnabled,
-		"prod",
-		false,
-		"[DEPRECATED] Alias for --enterprise flag.",
-	)
-
 	rootCmd.AddCommand(startServerCmd)
 }
 
@@ -131,6 +124,7 @@ func newProxyServers() (*server.MCPServer, *server.MCPServer) {
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
 		server.WithToolFilter(mcp.ProxyToolFilter),
+		server.WithPromptFilter(mcp.ProxyPromptFilter),
 	)
 	sseMcpProxyServer := server.NewMCPServer(
 		"MCPJungle Proxy MCP Server for SSE transport",
@@ -139,6 +133,7 @@ func newProxyServers() (*server.MCPServer, *server.MCPServer) {
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
 		server.WithToolFilter(mcp.ProxyToolFilter),
+		server.WithPromptFilter(mcp.ProxyPromptFilter),
 	)
 
 	return mcpProxyServer, sseMcpProxyServer
@@ -154,15 +149,6 @@ func getDesiredServerMode(cmd *cobra.Command) (model.ServerMode, error) {
 		// the value of the environment variable is allowed to be case-insensitive
 		envMode = strings.ToLower(envMode)
 
-		// If user is using the deprecated 'production' mode, replace it with 'enterprise'
-		if envMode == string(model.ModeProd) {
-			cmd.Printf(
-				"Warning: '%s' value is deprecated for env var %s, please use '%s' instead\n\n",
-				model.ModeProd, ServerModeEnvVar, model.ModeEnterprise,
-			)
-			envMode = string(model.ModeEnterprise)
-		}
-
 		if envMode != string(model.ModeDev) && envMode != string(model.ModeEnterprise) {
 			return "", fmt.Errorf(
 				"invalid value for %s environment variable: '%s', valid values are '%s' and '%s'",
@@ -173,12 +159,9 @@ func getDesiredServerMode(cmd *cobra.Command) (model.ServerMode, error) {
 		desiredServerMode = model.ServerMode(envMode)
 	}
 
-	// If the --enterprise or --prod flag is set, it gets precedence over the environment variable
-	if startServerCmdEnterpriseEnabled || startServerCmdProdEnabled {
+	// The explicit enterprise flag takes precedence over the environment variable.
+	if startServerCmdEnterpriseEnabled {
 		desiredServerMode = model.ModeEnterprise
-	}
-	if startServerCmdProdEnabled {
-		cmd.Println("Warning: --prod flag is deprecated, please use --enterprise flag instead")
 	}
 
 	return desiredServerMode, nil
@@ -425,10 +408,11 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create MCP service: %v", err)
 	}
 
-	mcpClientService := mcpclient.NewMCPClientService(dbConn)
-
 	configService := config.NewServerConfigService(dbConn)
 	userService := user.NewUserService(dbConn)
+	permissionService := permission.NewService(dbConn)
+	sessionService := session.NewService(dbConn)
+	deviceTokenService := devicetoken.NewService(dbConn, permissionService)
 	dashboardService := dashboard.NewService(dbConn, otelProviders.IsEnabled())
 
 	toolGroupService, err := toolgroup.NewToolGroupService(dbConn, mcpService)
@@ -436,27 +420,20 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create Tool Group service: %v", err)
 	}
 
-	// Resolve the JWT signing secret. In dev mode an unset secret yields an
-	// ephemeral random one; in enterprise mode it is required (fail-closed).
-	authSecret, err := auth.ResolveSecret(desiredServerMode == model.ModeDev)
-	if err != nil {
-		return err
-	}
-	authSigner := auth.NewSigner(authSecret)
-
 	// create the API server
 	opts := &api.ServerOptions{
-		MCPProxyServer:    mcpProxyServer,
-		SseMcpProxyServer: sseMcpProxyServer,
-		MCPService:        mcpService,
-		MCPClientService:  mcpClientService,
-		ConfigService:     configService,
-		UserService:       userService,
-		ToolGroupService:  toolGroupService,
-		DashboardService:  dashboardService,
-		OtelProviders:     otelProviders,
-		Metrics:           mcpMetrics,
-		AuthSigner:        authSigner,
+		MCPProxyServer:     mcpProxyServer,
+		SseMcpProxyServer:  sseMcpProxyServer,
+		MCPService:         mcpService,
+		ConfigService:      configService,
+		UserService:        userService,
+		ToolGroupService:   toolGroupService,
+		DashboardService:   dashboardService,
+		SessionService:     sessionService,
+		PermissionService:  permissionService,
+		DeviceTokenService: deviceTokenService,
+		OtelProviders:      otelProviders,
+		Metrics:            mcpMetrics,
 	}
 	s, err := api.NewServer(opts)
 	if err != nil {

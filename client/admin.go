@@ -21,16 +21,12 @@ type InitServerResponse struct {
 func (c *Client) InitServer(adminUsername, adminPassword string) (*InitServerResponse, error) {
 	u, _ := url.JoinPath(c.baseURL, "/init")
 
-	// TODO: Replace ModeProd with ModeEnterprise in future.
-	// For backward compatibility, the client sends ModeProd to indicate enterprise mode.
-	// This is because mcpjungle server versions < 0.2.12 do not recognize ModeEnterprise.
-	// Servers >= 0.2.12 will treat ModeProd as enterprise mode.
 	payload := struct {
 		Mode          string `json:"mode"`
 		AdminUsername string `json:"admin_username"`
 		AdminPassword string `json:"admin_password"`
 	}{
-		Mode:          string(model.ModeProd),
+		Mode:          string(model.ModeEnterprise),
 		AdminUsername: adminUsername,
 		AdminPassword: adminPassword,
 	}

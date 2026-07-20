@@ -12,20 +12,13 @@ const (
 	// ModeDev is ideal for developers running the mcpjungle locally for personal MCP workflows.
 	ModeDev ServerMode = "development"
 
-	// ModeEnterprise is ideal for enterprise (production) deployments where multiple users will be using mcpjungle.
+	// ModeEnterprise is ideal for team deployments where multiple users will be using mcpjungle.
 	ModeEnterprise ServerMode = "enterprise"
-
-	// ModeProd is a deprecated alias for ModeEnterprise.
-	// It exists for the sake of backward compatibility.
-	ModeProd ServerMode = "production"
 )
 
-// IsEnterpriseMode returns true if the given server mode is an enterprise mode (ModeEnterprise or ModeProd),
-// false otherwise.
-// This function exists mainly for the sake of backward compatibility, since ModeProd is deprecated but still
-// accepted as enterprise mode.
+// IsEnterpriseMode returns true only for the authenticated team mode.
 func IsEnterpriseMode(mode ServerMode) bool {
-	return mode == ModeEnterprise || mode == ModeProd
+	return mode == ModeEnterprise
 }
 
 // ServerConfig represents the configuration for the MCPJungle server.
@@ -46,9 +39,6 @@ func (c *ServerConfig) BeforeSave(tx *gorm.DB) (err error) {
 		// valid
 	case ModeEnterprise:
 		// valid
-	case ModeProd:
-		// valid but deprecated
-		c.Mode = ModeEnterprise
 	default:
 		return fmt.Errorf("invalid server mode: %s", c.Mode)
 	}

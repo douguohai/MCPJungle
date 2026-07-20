@@ -31,8 +31,10 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	configSvc "github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	mcpSvc "github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
+	"github.com/mcpjungle/mcpjungle/internal/service/session"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	userSvc "github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -71,8 +73,8 @@ type renderedPromptResult struct {
 // e2eEnv holds a running MCPJungle httptest server and associated tokens.
 type e2eEnv struct {
 	baseURL    string
-	adminToken string // populated only in enterprise mode
-	userToken  string // populated only in enterprise mode (regular user)
+	adminToken string // session cookie value in enterprise mode
+	userToken  string // session cookie value in enterprise mode
 	db         *gorm.DB
 }
 
@@ -92,7 +94,7 @@ func (e *e2eEnv) do(t *testing.T, method, path string, body any, token string) *
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+		req.AddCookie(&http.Cookie{Name: "mcpj_session", Value: token})
 	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -108,8 +110,8 @@ func decodeJSON(t *testing.T, r *http.Response, target any) {
 	require.NoError(t, json.NewDecoder(r.Body).Decode(target))
 }
 
-// setupE2EServer spins up a full MCPJungle HTTP server backed by an in-memory
-// SQLite DB, initialised in the requested mode.
+// setupE2EServer spins up a full MCPJungle HTTP server backed by an isolated
+// MySQL table namespace, initialized in the requested mode.
 // In enterprise mode, env.adminToken and env.userToken are set.
 // The server is shut down via t.Cleanup.
 func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
@@ -125,11 +127,13 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
 		server.WithToolFilter(mcpSvc.ProxyToolFilter),
+		server.WithPromptFilter(mcpSvc.ProxyPromptFilter),
 	)
 	sseMcpProxy := server.NewMCPServer("MCPJungle SSE", "0.0.1",
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
 		server.WithToolFilter(mcpSvc.ProxyToolFilter),
+		server.WithPromptFilter(mcpSvc.ProxyPromptFilter),
 	)
 
 	mcpService, err := mcpSvc.NewMCPService(&mcpSvc.ServiceConfig{
@@ -143,19 +147,24 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 
 	cfgSvc := configSvc.NewServerConfigService(db)
 	usrSvc := userSvc.NewUserService(db)
+	permissionSvc := permission.NewService(db)
+	sessionSvc := session.NewService(db)
+	deviceTokenSvc := devicetoken.NewService(db, permissionSvc)
 	tgSvc, err := toolgroup.NewToolGroupService(db, mcpService)
 	require.NoError(t, err)
 
 	apiServer, err := api.NewServer(&api.ServerOptions{
-		MCPProxyServer:    mcpProxy,
-		SseMcpProxyServer: sseMcpProxy,
-		MCPService:        mcpService,
-		MCPClientService:  mcpclient.NewMCPClientService(db),
-		ConfigService:     cfgSvc,
-		DashboardService:  dashboard.NewService(db, false),
-		UserService:       usrSvc,
-		ToolGroupService:  tgSvc,
-		Metrics:           telemetry.NewNoopCustomMetrics(),
+		MCPProxyServer:     mcpProxy,
+		SseMcpProxyServer:  sseMcpProxy,
+		MCPService:         mcpService,
+		ConfigService:      cfgSvc,
+		DashboardService:   dashboard.NewService(db, false),
+		UserService:        usrSvc,
+		ToolGroupService:   tgSvc,
+		SessionService:     sessionSvc,
+		PermissionService:  permissionSvc,
+		DeviceTokenService: deviceTokenSvc,
+		Metrics:            telemetry.NewNoopCustomMetrics(),
 	})
 	require.NoError(t, err)
 
@@ -167,16 +176,15 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 	case model.ModeEnterprise:
 		_, err = cfgSvc.Init(model.ModeEnterprise)
 		require.NoError(t, err)
-		_, err = usrSvc.CreateAdminUser("admin", "test-password")
+		adminUser, err := usrSvc.CreateAdminUser("admin", "test-password-123")
 		require.NoError(t, err)
-		// e2e drives the legacy access-token fallback path of the auth
-		// middleware; assign a known token to the admin for that purpose.
-		adminUser, err := usrSvc.UpdateUser(&model.User{Username: "admin", AccessToken: "e2e-admin-token-123"})
+		env.adminToken, _, err = sessionSvc.Create(adminUser.ID, "127.0.0.1", "e2e")
 		require.NoError(t, err)
-		env.adminToken = adminUser.AccessToken
-		regularUser, err := usrSvc.CreateUser(&model.User{Username: "regularuser"})
+		regularUser, initialPassword, err := usrSvc.Create(userSvc.CreateUserInput{Username: "regularuser"})
 		require.NoError(t, err)
-		env.userToken = regularUser.AccessToken
+		require.NoError(t, usrSvc.ChangePassword(regularUser.ID, initialPassword, "regular-password-123"))
+		env.userToken, _, err = sessionSvc.Create(regularUser.ID, "127.0.0.1", "e2e")
+		require.NoError(t, err)
 	default:
 		t.Fatalf("unsupported server mode: %s", mode)
 	}
@@ -242,31 +250,14 @@ func promptNames(prompts []map[string]any) []string {
 	return names
 }
 
-// createMcpClient creates an MCP client with the given allow list and returns its access token.
-func createMcpClient(t *testing.T, env *e2eEnv, name string, allowList []string) string {
-	t.Helper()
-	resp := env.do(t, http.MethodPost, "/api/v0/clients", map[string]any{
-		"name":       name,
-		"allow_list": allowList,
-	}, env.adminToken)
-	defer drain(resp)
-	require.Equal(t, http.StatusCreated, resp.StatusCode, "create MCP client %q", name)
-	var mcpClient map[string]any
-	decodeJSON(t, resp, &mcpClient)
-	token, ok := mcpClient["access_token"].(string)
-	require.True(t, ok, "access_token must be a string")
-	require.NotEmpty(t, token)
-	return token
-}
-
 // newMCPProxyClient creates an initialized StreamableHTTP MCP client that
-// connects to the global /mcp endpoint using the provided client token.
-func newMCPProxyClient(t *testing.T, env *e2eEnv, clientToken string) *client.Client {
+// connects to the global /mcp endpoint using the provided personal device token.
+func newMCPProxyClient(t *testing.T, env *e2eEnv, deviceToken string) *client.Client {
 	t.Helper()
 	opts := []transport.StreamableHTTPCOption{}
-	if clientToken != "" {
+	if deviceToken != "" {
 		opts = append(opts, transport.WithHTTPHeaders(map[string]string{
-			"Authorization": "Bearer " + clientToken,
+			"Authorization": "Bearer " + deviceToken,
 		}))
 	}
 	c, err := client.NewStreamableHttpClient(env.baseURL+"/mcp", opts...)

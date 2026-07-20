@@ -399,7 +399,8 @@ func TestDeregisterMcpServer_RemovesEntitiesOAuthStateAndSession(t *testing.T) {
 	}).Error)
 
 	service := newTestLifecycleService(t, db)
-	service.sessionManager.sessions[srv.Name] = &ManagedSession{ServerName: srv.Name}
+	sessionKey := SessionKey{ServerName: srv.Name}
+	service.sessionManager.sessions[sessionKey] = &ManagedSession{Key: sessionKey, ServerName: srv.Name}
 	require.True(t, service.sessionManager.HasSession(srv.Name))
 
 	err := service.DeregisterMcpServer(srv.Name)

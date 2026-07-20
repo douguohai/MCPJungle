@@ -6,150 +6,52 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestMcpProxyToolFilter(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		mode      model.ServerMode
-		client    *model.McpClient
-		tools     []mcp.Tool
-		wantNames []string
-	}{
-		{
-			name: "development mode returns all tools",
-			mode: model.ModeDev,
-			tools: []mcp.Tool{
-				{Name: "time__get_current_time"},
-				{Name: "deepwiki__search_wiki"},
-			},
-			wantNames: []string{"time__get_current_time", "deepwiki__search_wiki"},
-		},
-		{
-			name: "enterprise mode filters unauthorized tools",
-			mode: model.ModeEnterprise,
-			client: &model.McpClient{
-				Name:      "claude",
-				AllowList: model.JSON(`["time"]`),
-			},
-			tools: []mcp.Tool{
-				{Name: "time__get_current_time"},
-				{Name: "deepwiki__search_wiki"},
-			},
-			wantNames: []string{"time__get_current_time"},
-		},
-		{
-			name: "enterprise mode wildcard allows all tools",
-			mode: model.ModeEnterprise,
-			client: &model.McpClient{
-				Name:      "cursor",
-				AllowList: model.JSON(`["*"]`),
-			},
-			tools: []mcp.Tool{
-				{Name: "time__get_current_time"},
-				{Name: "deepwiki__search_wiki"},
-			},
-			wantNames: []string{"time__get_current_time", "deepwiki__search_wiki"},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := context.WithValue(context.Background(), "mode", tt.mode)
-			if tt.client != nil {
-				ctx = context.WithValue(ctx, "client", tt.client)
-			}
-
-			got := ProxyToolFilter(ctx, tt.tools)
-			assert.Equal(t, tt.wantNames, toolNames(got))
-		})
+func TestProxyToolFilterUsesDeviceTokenServiceSet(t *testing.T) {
+	tools := []mcp.Tool{{Name: "allowed__one"}, {Name: "denied__two"}, {Name: "malformed"}}
+	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
+	ctx = WithAccessContext(ctx, AccessContext{
+		UserID: 1, DeviceTokenID: 2,
+		EffectiveServerNames: map[string]struct{}{"allowed": {}},
+	})
+	got := ProxyToolFilter(ctx, tools)
+	if len(got) != 1 || got[0].Name != "allowed__one" {
+		t.Fatalf("unexpected filtered tools: %+v", got)
 	}
 }
 
-func TestMcpProxyToolFilter_MissingModeInContext(t *testing.T) {
-	t.Parallel()
-
-	got := ProxyToolFilter(context.Background(), []mcp.Tool{
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Empty(t, got)
-}
-
-func TestMcpProxyToolFilter_InvalidModeTypeInContext(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(context.Background(), "mode", "enterprise")
-	got := ProxyToolFilter(ctx, []mcp.Tool{
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Empty(t, got)
-}
-
-func TestMcpProxyToolFilter_EnterpriseMissingClientInContext(t *testing.T) {
-	t.Parallel()
-
+func TestProxyToolFilterFailsClosedWithoutAccessContext(t *testing.T) {
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	got := ProxyToolFilter(ctx, []mcp.Tool{
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Empty(t, got)
-}
-
-func TestMcpProxyToolFilter_EnterpriseInvalidClientTypeInContext(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", "not-a-client")
-	got := ProxyToolFilter(ctx, []mcp.Tool{
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Empty(t, got)
-}
-
-func TestMcpProxyToolFilter_EnterpriseNilClientInContext(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	var client *model.McpClient
-	ctx = context.WithValue(ctx, "client", client)
-	got := ProxyToolFilter(ctx, []mcp.Tool{
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Empty(t, got)
-}
-
-func TestMcpProxyToolFilter_EnterpriseMalformedToolNamesAreDenied(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "claude",
-		AllowList: model.JSON(`["time"]`),
-	})
-
-	got := ProxyToolFilter(ctx, []mcp.Tool{
-		{Name: "missing_separator"},
-		{Name: "time__get_current_time"},
-	})
-
-	assert.Equal(t, []string{"time__get_current_time"}, toolNames(got))
-}
-
-func toolNames(tools []mcp.Tool) []string {
-	names := make([]string, len(tools))
-	for i, tool := range tools {
-		names[i] = tool.Name
+	if got := ProxyToolFilter(ctx, []mcp.Tool{{Name: "server__tool"}}); len(got) != 0 {
+		t.Fatalf("enterprise request without device context must be denied: %+v", got)
 	}
-	return names
+}
+
+func TestProxyToolFilterAllowsDevelopmentMode(t *testing.T) {
+	tools := []mcp.Tool{{Name: "server__tool"}}
+	ctx := context.WithValue(context.Background(), "mode", model.ModeDev)
+	if got := ProxyToolFilter(ctx, tools); len(got) != 1 {
+		t.Fatalf("development mode should remain unrestricted: %+v", got)
+	}
+}
+
+func TestProxyPromptFilterUsesDeviceTokenServiceSet(t *testing.T) {
+	prompts := []mcp.Prompt{{Name: "allowed__review"}, {Name: "denied__review"}, {Name: "malformed"}}
+	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
+	ctx = WithAccessContext(ctx, AccessContext{
+		UserID: 7, DeviceTokenID: 9,
+		EffectiveServerNames: map[string]struct{}{"allowed": {}},
+	})
+	got := ProxyPromptFilter(ctx, prompts)
+	if len(got) != 1 || got[0].Name != "allowed__review" {
+		t.Fatalf("unexpected filtered prompts: %+v", got)
+	}
+}
+
+func TestProxyPromptFilterFailsClosedWithoutAccessContext(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
+	if got := ProxyPromptFilter(ctx, []mcp.Prompt{{Name: "server__prompt"}}); len(got) != 0 {
+		t.Fatalf("enterprise request without device context must be denied: %+v", got)
+	}
 }

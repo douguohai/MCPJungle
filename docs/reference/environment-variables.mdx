@@ -5,90 +5,17 @@ description: "Complete reference for every environment variable the mcpjungle se
 
 ## Database
 
-MCPJungle supports SQLite (default) and PostgreSQL. Use either `DATABASE_URL` for a full DSN or the individual `POSTGRES_*` variables to build the DSN from parts.
+MCPJungle requires MySQL 8.0 and reads its connection settings from `DATABASE_URL`.
 
 <ParamField path="DATABASE_URL" type="string">
-  Full PostgreSQL connection string. When set, MCPJungle connects to PostgreSQL and ignores any `POSTGRES_*` variables.
+  **Required.** Full MySQL connection URL. MCPJungle exits during startup when this variable is missing, malformed, or uses another database scheme.
 
   ```bash
-  export DATABASE_URL=postgres://admin:root@localhost:5432/mcpjungle_db
+  export DATABASE_URL=mysql://user:pass@host:3306/db
   ```
 
-  When this variable is not set and `POSTGRES_HOST` is also not set, MCPJungle falls back to an embedded SQLite database file (`mcpjungle.db`) in the current working directory.
+  The target database must run MySQL 8.0, use `utf8mb4`, and store timestamps in UTC. Percent-encode special characters in the username or password before placing them in the URL.
 </ParamField>
-
-<ParamField path="SQLITE_DB_PATH" type="string">
-  Optional path to the SQLite database file to use when `DATABASE_URL` and `POSTGRES_HOST` are not set. If this variable is not set, MCPJungle defaults to `./mcpjungle.db`. The `--sqlite-db-path` CLI flag takes precedence over this variable.
-
-  ```bash
-  export SQLITE_DB_PATH=./.mcpjungle.db
-  mcpjungle start
-  ```
-
-  When this variable is set, MCPJungle uses that exact path instead of auto-detecting `mcpjungle.db`.
-</ParamField>
-
-<ParamField path="POSTGRES_HOST" type="string">
-  PostgreSQL host. **Required** when using the individual `POSTGRES_*` variables instead of `DATABASE_URL`. If this variable is not set, MCPJungle does not attempt to build a PostgreSQL DSN from the other `POSTGRES_*` variables.
-
-  ```bash
-  export POSTGRES_HOST=localhost
-  ```
-</ParamField>
-
-<ParamField path="POSTGRES_PORT" type="string" default="5432">
-  PostgreSQL port.
-
-  ```bash
-  export POSTGRES_PORT=5432
-  ```
-</ParamField>
-
-<ParamField path="POSTGRES_USER" type="string" default="postgres">
-  PostgreSQL username. If both `POSTGRES_USER` and `POSTGRES_USER_FILE` are set, `POSTGRES_USER` takes precedence.
-</ParamField>
-
-<ParamField path="POSTGRES_USER_FILE" type="string">
-  Path to a file containing the PostgreSQL username. Useful with Docker secrets. MCPJungle reads the file and trims surrounding whitespace.
-
-  ```bash
-  export POSTGRES_USER_FILE=/run/secrets/pg_user
-  ```
-</ParamField>
-
-<ParamField path="POSTGRES_PASSWORD" type="string">
-  PostgreSQL password. If both `POSTGRES_PASSWORD` and `POSTGRES_PASSWORD_FILE` are set, `POSTGRES_PASSWORD` takes precedence. The password can be empty.
-</ParamField>
-
-<ParamField path="POSTGRES_PASSWORD_FILE" type="string">
-  Path to a file containing the PostgreSQL password.
-
-  ```bash
-  export POSTGRES_PASSWORD_FILE=/run/secrets/pg_password
-  ```
-</ParamField>
-
-<ParamField path="POSTGRES_DB" type="string" default="postgres">
-  PostgreSQL database name. If both `POSTGRES_DB` and `POSTGRES_DB_FILE` are set, `POSTGRES_DB` takes precedence.
-</ParamField>
-
-<ParamField path="POSTGRES_DB_FILE" type="string">
-  Path to a file containing the PostgreSQL database name.
-
-  ```bash
-  export POSTGRES_DB_FILE=/run/secrets/pg_db
-  ```
-</ParamField>
-
-### Database resolution order
-
-When the server starts it resolves the database connection in this order:
-
-1. `DATABASE_URL` — used as-is if set.
-2. `POSTGRES_HOST` + optional `POSTGRES_*` variables — MCPJungle constructs a DSN if `POSTGRES_HOST` is set.
-3. `--sqlite-db-path` — uses the configured SQLite file path if the CLI flag is set.
-4. `SQLITE_DB_PATH` — uses the configured SQLite file path if the environment variable is set.
-5. SQLite fallback — creates or opens `mcpjungle.db` in the current working directory, while still recognizing an existing legacy `mcp.db`.
 
 ---
 
@@ -115,10 +42,6 @@ When the server starts it resolves the database connection in this order:
   |---|---|
   | `development` | No authentication enforced. All MCP clients have full access to all registered servers. Ideal for local use. |
   | `enterprise` | Strict access control, user management, and observability features. Requires running `mcpjungle init-server` after the first start. |
-
-  <Note>
-    The value `production` is accepted for backward compatibility but is deprecated. Use `enterprise` instead.
-  </Note>
 </ParamField>
 
 <ParamField path="MCP_SERVER_INIT_REQ_TIMEOUT_SEC" type="integer" default="30">
@@ -201,16 +124,7 @@ When the server starts it resolves the database connection in this order:
 
 | Variable | Category | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | Database | — | Full PostgreSQL DSN. |
-| `SQLITE_DB_PATH` | Database | — | SQLite database path used when PostgreSQL is not configured. |
-| `POSTGRES_HOST` | Database | — | PostgreSQL host. Required to enable `POSTGRES_*` variables. |
-| `POSTGRES_PORT` | Database | `5432` | PostgreSQL port. |
-| `POSTGRES_USER` | Database | `postgres` | PostgreSQL username. |
-| `POSTGRES_USER_FILE` | Database | — | File path for PostgreSQL username. |
-| `POSTGRES_PASSWORD` | Database | _(empty)_ | PostgreSQL password. |
-| `POSTGRES_PASSWORD_FILE` | Database | — | File path for PostgreSQL password. |
-| `POSTGRES_DB` | Database | `postgres` | PostgreSQL database name. |
-| `POSTGRES_DB_FILE` | Database | — | File path for PostgreSQL database name. |
+| `DATABASE_URL` | Database | Required | Full MySQL 8.0 connection URL. The database must use UTC and `utf8mb4`. |
 | `PORT` | Server | `8080` | HTTP listen port. |
 | `SERVER_MODE` | Server | `development` | Server mode: `development` or `enterprise`. |
 | `MCP_SERVER_INIT_REQ_TIMEOUT_SEC` | Server | `30` | Seconds to wait for MCP server initialization. |

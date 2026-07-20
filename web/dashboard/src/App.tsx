@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Spin } from "antd";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AuthLayout from "./layouts/AuthLayout";
 import RequireAuth from "./components/RouteGuard";
-import { authApi } from "./api/auth";
-import { getToken, setDevSession } from "./store/auth";
+import { useAuth } from "./store/auth";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
 import ServersPage from "./pages/ServersPage";
@@ -14,37 +12,14 @@ import ToolGroupsPage from "./pages/ToolGroupsPage";
 import PromptsPage from "./pages/PromptsPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
-import ClientsPage from "./pages/ClientsPage";
 import UsersPage from "./pages/UsersPage";
 import StatsPage from "./pages/StatsPage";
-
-// On first load, probe the backend. In development mode it lets the dashboard
-// in without a token; in enterprise mode the probe 401s and we show the login
-// page. This lets dev users skip the login screen entirely.
-function useBootstrap() {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    if (getToken()) {
-      setReady(true);
-      return;
-    }
-    authApi
-      .verify("")
-      .then((res) => {
-        if (res.authenticated && res.mode === "development") {
-          setDevSession({ username: res.username ?? "developer", role: res.role });
-        }
-      })
-      .catch(() => {
-        // enterprise mode without a token -> login page
-      })
-      .finally(() => setReady(true));
-  }, []);
-  return ready;
-}
+import ChangePasswordPage from "./pages/ChangePasswordPage";
+import DeviceTokensPage from "./pages/DeviceTokensPage";
+import PermissionGroupsPage from "./pages/PermissionGroupsPage";
 
 export default function App() {
-  const ready = useBootstrap();
+  const { ready } = useAuth();
   if (!ready) {
     return (
       <div
@@ -63,6 +38,14 @@ export default function App() {
     <Routes>
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/change-password"
+          element={
+            <RequireAuth allowPasswordChange>
+              <ChangePasswordPage />
+            </RequireAuth>
+          }
+        />
       </Route>
       <Route
         element={
@@ -78,9 +61,31 @@ export default function App() {
         <Route path="prompts" element={<PromptsPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />
-        <Route path="clients" element={<ClientsPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="stats" element={<StatsPage />} />
+        <Route path="device-tokens" element={<DeviceTokensPage />} />
+        <Route
+          path="users"
+          element={
+            <RequireAuth requiredRole="system_admin">
+              <UsersPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="permission-groups"
+          element={
+            <RequireAuth requiredRole="system_admin">
+              <PermissionGroupsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="stats"
+          element={
+            <RequireAuth requiredRole="system_admin">
+              <StatsPage />
+            </RequireAuth>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

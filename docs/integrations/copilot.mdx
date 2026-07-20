@@ -54,15 +54,7 @@ Follow [GitHub's documentation on configuring MCP servers manually](https://docs
 
 ## Enterprise mode (authentication)
 
-If your Mcpjungle instance runs in enterprise mode, create a dedicated MCP client for Copilot and include its access token in the request headers.
-
-Create the client with the Mcpjungle CLI:
-
-```bash
-mcpjungle create mcp-client copilot-local --allow "server1, server2"
-```
-
-Then update `mcp.json` to send the token:
+If your Mcpjungle instance runs in enterprise mode, create a personal device token in the Dashboard for the user or workflow that Copilot should use. Copy that token once, then update `mcp.json` to send it:
 
 ```json
 {
@@ -70,17 +62,17 @@ Then update `mcp.json` to send the token:
     "mcpjungle": {
       "url": "http://localhost:8080/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_ACCESS_TOKEN"
+        "Authorization": "Bearer YOUR_DEVICE_TOKEN"
       }
     }
   }
 }
 ```
 
-Replace `YOUR_ACCESS_TOKEN` with the token printed by `mcpjungle create mcp-client`.
+Replace `YOUR_DEVICE_TOKEN` with the device token copied from the Dashboard.
 
 <Warning>
-  In enterprise mode, a client can only access the servers listed in its `--allow` flag. If Copilot reports no tools, verify the client was created with the correct server names.
+  If Copilot reports no tools, verify that the device token belongs to a user in the correct permission groups.
 </Warning>
 
 ## Limit tools with Tool Groups

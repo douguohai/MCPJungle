@@ -1,9 +1,9 @@
 ---
 title: "Enterprise operations"
-description: "Reference for enterprise-mode CLI commands: initialization, login, MCP clients, users, and token rotation."
+description: "Reference for enterprise bootstrap and the current Dashboard-based enterprise workflow."
 ---
 
-Enterprise mode adds authentication and access control to mcpjungle. These commands are used to bootstrap an enterprise deployment and manage who or what can connect to it.
+Enterprise mode adds authentication and access control to mcpjungle, but ongoing administration happens in the Dashboard.
 
 Use the governance guides for the full operational model:
 
@@ -16,7 +16,7 @@ Use the governance guides for the full operational model:
 </Info>
 
 <Note>
-  Treat `mcpjungle <command> --help` as the authoritative source for current flags. This page keeps the important setup flow, examples, and config patterns.
+  Treat `mcpjungle <command> --help` as the authoritative source for current bootstrap flags. Legacy enterprise CLI management workflows for users, device tokens, permission groups, and client identities are no longer supported.
 </Note>
 
 ## `init-server`
@@ -27,163 +27,21 @@ Initializes a fresh enterprise server.
 mcpjungle --registry http://your-server:8080 init-server
 ```
 
-Run this once against a new enterprise deployment. It creates the first admin user, generates the admin access token, and stores the server URL and token in `~/.mcpjungle.conf`.
+Run this once against a new enterprise deployment. It creates the initial admin user, generates a one-time initial password, and stores the server URL in `~/.mcpjungle.conf`.
 
 <Warning>
-  This is a one-time bootstrap step. Store the generated admin credentials securely.
+  This is a one-time bootstrap step. Store the generated bootstrap credentials securely.
 </Warning>
 
-## `login`
+## Dashboard workflow
 
-Stores an existing access token in `~/.mcpjungle.conf` so the CLI can authenticate future requests.
+Use the Dashboard for all ongoing enterprise administration:
 
-```bash
-mcpjungle login <access-token>
-```
-
-Example:
-
-```bash
-mcpjungle login eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-This is what regular users run after an administrator creates their account and shares a token with them.
-
-## `create mcp-client`
-
-Creates an authenticated MCP client identity.
-
-```bash
-mcpjungle create mcp-client <name> [flags]
-mcpjungle create mcp-client --conf <file>
-```
-
-Common flags:
-
-<ParamField body="--allow" type="string">
-  Comma-separated allow list of MCP server names. Example: `--allow "github,jira"`.
-</ParamField>
-
-<ParamField body="--access-token" type="string">
-  Custom token for the client. If omitted, the server generates one and prints it once.
-</ParamField>
-
-<ParamField body="-c / --conf" type="string">
-  Path to a JSON config file. When provided, the CLI ignores the other flags.
-</ParamField>
-
-Examples:
-
-```bash
-# Let mcpjungle generate the token
-mcpjungle create mcp-client claude-desktop --allow "github,jira"
-
-# Supply your own token
-mcpjungle create mcp-client my-agent \
-  --allow "github" \
-  --access-token my-custom-token
-```
-
-Config file example:
-
-```json
-{
-  "name": "claude-desktop",
-  "description": "Claude Desktop on Alice's machine",
-  "allowed_servers": ["github", "jira"],
-  "access_token_ref": {
-    "env": "CLAUDE_CLIENT_TOKEN"
-  }
-}
-```
-
-You can also load the token from a file:
-
-```json
-{
-  "name": "claude-desktop",
-  "allowed_servers": ["github", "jira"],
-  "access_token_ref": {
-    "file": "/run/secrets/claude-token"
-  }
-}
-```
-
-<Note>
-  When creating a client from `--conf`, you must provide a custom token via `access_token` or `access_token_ref`.
-</Note>
-
-<Tip>
-  `--allow "*"` gives the client access to all registered MCP servers, including future ones. This is convenient for testing and strongly discouraged in production.
-</Tip>
-
-For token supply options and placeholder handling, see [Config file reference](/reference/config-file).
-
-## `delete mcp-client`
-
-Deletes an MCP client and immediately revokes its access to the mcp gateway.
-
-```bash
-mcpjungle delete mcp-client <name>
-```
-
-Example:
-
-```bash
-mcpjungle delete mcp-client claude-desktop
-```
-
-## `create user`
-
-Creates a standard user account for a human operator.
-
-```bash
-mcpjungle create user <username> [flags]
-mcpjungle create user --conf <file>
-```
-
-Examples:
-
-```bash
-# Let mcpjungle generate the token
-mcpjungle create user alice
-
-# Supply your own token
-mcpjungle create user alice --access-token alice-custom-token
-```
-
-Config file example:
-
-```json
-{
-  "name": "alice",
-  "access_token_ref": {
-    "env": "ALICE_ACCESS_TOKEN"
-  }
-}
-```
-
-When user creation succeeds, the CLI prints the `mcpjungle login <token>` command that the user should run locally.
-
-<Note>
-  When creating a user from `--conf`, you must provide a custom token via `access_token` or `access_token_ref`.
-</Note>
-
-For token supply options and placeholder handling, see [Config file reference](/reference/config-file).
-
-## `delete user`
-
-Deletes a user and revokes their access to mcpjungle immediately.
-
-```bash
-mcpjungle delete user <username>
-```
-
-Example:
-
-```bash
-mcpjungle delete user alice
-```
+- create pending users and share the one-time initial password
+- require each user to change the password on first sign-in
+- create permission groups and bind upstream MCP servers to them
+- issue personal device tokens for each MCP client or device
+- revoke device tokens when access needs to be removed
 
 ## Typical setup flow
 
@@ -200,22 +58,11 @@ mcpjungle delete user alice
     ```
   </Step>
 
-  <Step title="Register upstream MCP servers">
-    ```bash
-    mcpjungle register --name github --url https://api.githubcopilot.com/mcp \
-      --bearer-token ghp_your_token
-    ```
+  <Step title="Open the Dashboard">
+    Sign in as the initial administrator, then create pending users, permission groups, and personal device tokens.
   </Step>
 
-  <Step title="Create MCP clients for agents and apps">
-    ```bash
-    mcpjungle create mcp-client claude-desktop --allow "github"
-    ```
-  </Step>
-
-  <Step title="Create user accounts for operators">
-    ```bash
-    mcpjungle create user alice
-    ```
+  <Step title="Register upstream MCP servers in the Dashboard">
+    Add the upstream servers you want the gateway to expose, then bind them to the appropriate permission groups.
   </Step>
 </Steps>

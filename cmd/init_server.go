@@ -53,8 +53,7 @@ func runInitServer(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Admin username: %s\n", resp.AdminUsername)
 	fmt.Println()
-	fmt.Println("You can now log in with:")
-	fmt.Printf("  mcpjungle login --username %s --password $%s\n", username, InitAdminPasswordEnvVar)
+	fmt.Println("Open the MCPJungle dashboard at the configured registry URL and log in with the administrator credentials.")
 	fmt.Println()
 	fmt.Println("All done!")
 	return nil

@@ -89,6 +89,7 @@ func (s *Service) Servers() (*types.DashboardServersResponse, error) {
 	for _, inv := range inventory {
 		summary := summarizeServerConfig(inv.McpServer)
 		resp.Servers = append(resp.Servers, types.DashboardServer{
+			ID:                inv.ID,
 			Name:              inv.Name,
 			Transport:         string(inv.Transport),
 			Enabled:           inv.Enabled,
@@ -316,24 +317,25 @@ func (s *Service) loadServerInventory() ([]serverInventory, error) {
 // loadEntityCounts returns the number of entities currently exposed through the
 // gateway after applying both server-level and per-entity enabled flags.
 func (s *Service) loadEntityCounts() (int, int, int, error) {
+	enabledServerIDs := s.db.Model(&model.McpServer{}).Select("id").Where("enabled = ?", true)
 	var toolCount int64
 	if err := s.db.Model(&model.Tool{}).
-		Joins("JOIN mcp_servers ON mcp_servers.id = tools.server_id").
-		Where("tools.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("enabled = ?", true).
+		Where("server_id IN (?)", enabledServerIDs).
 		Count(&toolCount).Error; err != nil {
 		return 0, 0, 0, err
 	}
 	var promptCount int64
 	if err := s.db.Model(&model.Prompt{}).
-		Joins("JOIN mcp_servers ON mcp_servers.id = prompts.server_id").
-		Where("prompts.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("enabled = ?", true).
+		Where("server_id IN (?)", enabledServerIDs).
 		Count(&promptCount).Error; err != nil {
 		return 0, 0, 0, err
 	}
 	var resourceCount int64
 	if err := s.db.Model(&model.Resource{}).
-		Joins("JOIN mcp_servers ON mcp_servers.id = resources.server_id").
-		Where("resources.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("enabled = ?", true).
+		Where("server_id IN (?)", enabledServerIDs).
 		Count(&resourceCount).Error; err != nil {
 		return 0, 0, 0, err
 	}

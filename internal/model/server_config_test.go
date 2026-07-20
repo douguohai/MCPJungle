@@ -18,11 +18,6 @@ func TestIsEnterpriseMode(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "Prod mode (deprecated alias)",
-			mode:     ModeProd,
-			expected: true,
-		},
-		{
 			name:     "Development mode",
 			mode:     ModeDev,
 			expected: false,
@@ -69,10 +64,10 @@ func TestServerConfig_BeforeSave(t *testing.T) {
 			wantFinal: ModeEnterprise,
 		},
 		{
-			name:      "Deprecated prod mode (should convert to enterprise)",
-			mode:      ModeProd,
-			wantErr:   false,
-			wantFinal: ModeEnterprise,
+			name:      "Production alias is rejected",
+			mode:      ServerMode("production"),
+			wantErr:   true,
+			wantFinal: ServerMode("production"),
 		},
 		{
 			name:      "Unknown mode",

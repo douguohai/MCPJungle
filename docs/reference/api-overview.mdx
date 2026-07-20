@@ -36,7 +36,7 @@ Tokens are created per-user or per-MCP-client when you call `POST /api/v0/users`
 | **Admin** | Full read/write access to all endpoints. Required for registering servers, managing clients, users, and tool groups. |
 | **User** | Read access and tool invocation. Can list servers, tools, prompts, and resources, and can call `POST /api/v0/tools/invoke`. |
 
-MCP clients (non-human agents) authenticate with their own tokens and are further restricted to the servers listed in their allow list.
+MCP clients (non-human agents) authenticate with their own personal device tokens and are further restricted by the permission groups assigned to the owning user.
 
 ## Example request
 

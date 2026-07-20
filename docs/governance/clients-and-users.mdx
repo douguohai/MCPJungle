@@ -1,81 +1,45 @@
 ---
 title: "Manage clients and users"
-description: "Manage machine identities for MCP clients and user accounts for human operators in Mcpjungle enterprise mode."
+description: "Manage human users, permission groups, and personal device tokens in Mcpjungle enterprise mode."
 ---
 
-Enterprise mode separates machine identities from human identities.
+Enterprise mode separates human users from the personal device tokens used by MCP clients.
 
-- **MCP clients** represent IDEs, bridges, and agents that connect to the gateway.
-- **Users** represent humans who need authenticated access to Mcpjungle.
+- **Users** are human operators who sign in with username and password through the Dashboard.
+- **Personal device tokens** are the credentials MCP clients use to connect to the gateway on behalf of a user.
 
-That separation keeps client access control clean and avoids overloading one token model for every use case.
-
-## MCP clients
-
-MCP clients are intended for non-human consumers of the gateway, such as:
-
-- Cursor
-- Claude
-- internal or custom agents
-
-Each MCP client gets:
-
-- a unique name
-- an access token
-- an allow-list of upstream MCP servers
-
-See [Access control](/governance/access-control) for the main workflow.
+That separation keeps browser sign-in, client auth, and permission assignment clean.
 
 ## Users
 
-Users are human accounts for operators who need authenticated CLI or API access.
+Administrators create users as pending accounts in the Dashboard.
 
-Compared with admins, a standard user has a narrower permission set. They can inspect and use Mcpjungle, but they do not get the same write capabilities as an admin.
+The Dashboard shows a one-time initial password when the user is created. The user must sign in and change that password before the account becomes active.
 
-## Create users
+Standard users can inspect and use Mcpjungle according to the permission groups assigned to them. They do not get the same write capabilities as a system administrator.
 
-```bash
-# Auto-generated token
-mcpjungle create user bob
+## Personal device tokens
 
-# Custom token
-mcpjungle create user alice --access-token alice_token_123
+Create a personal device token for each MCP client or device from the Dashboard.
 
-# From config file
-mcpjungle create user --conf /path/to/user-config.json
-```
+The token value is shown only once when it is created. Copy it immediately and send it in the `Authorization: Bearer` header from the client.
 
-## User config file
+If a device is retired or a token is leaked, revoke the token in the Dashboard and issue a replacement.
 
-```json
-{
-  "name": "charlie",
-  "access_token": "charlies_secret_token",
-  "access_token_ref": {
-    "file": "/path/to/token-file.txt",
-    "env": "ENV_VAR_NAME"
-  }
-}
-```
+## Permission groups
 
-When using a config file, provide a token explicitly.
+Permission groups determine which upstream MCP servers a user and their device tokens can reach.
 
-See the [configuration file reference](/reference/config-file#token-supply-strategies) for the supported token supply strategies for MCP client and user config files.
-
-## Environment variable placeholders
-
-JSON config files support `${VAR_NAME}` placeholders in string values.
-
-See the [configuration file reference](/reference/config-file#var_name-placeholder-substitution) for the exact substitution rules and examples.
+See [Access control](/governance/access-control) for the main workflow.
 
 ## Recommended identity model
 
 For a small to medium sized deployment:
 
 - create a small number of admin users for platform operators
-- create one user in mcpjungle for each human operator who needs CLI or API access
-- create one MCP client per consuming application or workflow
-- avoid sharing one token across multiple tools or teams
+- create one user in Mcpjungle for each human operator who needs Dashboard access
+- create one personal device token per consuming application or workflow
+- avoid sharing one device token across multiple tools or teams
 
 That keeps auditability and token rotation manageable without introducing needless process overhead.
 
@@ -83,7 +47,7 @@ That keeps auditability and token rotation manageable without introducing needle
 
 <CardGroup cols={2}>
   <Card title="Access control" icon="shield-halved" href="/governance/access-control">
-    Control which upstream servers each MCP client can access.
+    Control which upstream servers each user and device token can access.
   </Card>
   <Card title="Governance overview" icon="lock" href="/governance/overview">
     Understand the overall enterprise operating model.

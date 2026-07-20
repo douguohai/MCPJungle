@@ -26,22 +26,31 @@ func TestDashboardRootServedInDevMode(t *testing.T) {
 	require.Contains(t, body, "MCPJungle Dashboard")
 }
 
-func TestDashboardRootHiddenInEnterpriseMode(t *testing.T) {
+func TestDashboardRootServedInEnterpriseMode(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
 	resp := env.do(t, http.MethodGet, "/", nil, env.adminToken)
 	defer drain(resp)
 
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, readBody(t, resp), "MCPJungle Dashboard")
 }
 
-func TestDashboardAPIHiddenInEnterpriseMode(t *testing.T) {
+func TestDashboardAPIAvailableToAuthenticatedAdminInEnterpriseMode(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
 	resp := env.do(t, http.MethodGet, "/api/dashboard/overview", nil, env.adminToken)
 	defer drain(resp)
 
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestLegacyV0InvocationSurfaceDeniedInEnterpriseMode(t *testing.T) {
+	env := setupE2EServer(t, model.ModeEnterprise)
+
+	resp := env.do(t, http.MethodGet, "/api/v0/tools", nil, env.userToken)
+	defer drain(resp)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
 func TestDashboardAPIEmptyStates(t *testing.T) {

@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
+	"gorm.io/gorm"
 )
 
 func TestNewServerConfigService(t *testing.T) {
@@ -14,6 +16,29 @@ func TestNewServerConfigService(t *testing.T) {
 	testhelpers.AssertNotNil(t, svc)
 	if svc.db != db {
 		t.Errorf("Expected db to be %v, got %v", db, svc.db)
+	}
+}
+
+func TestInitWithRollsBackConfigWhenSetupFails(t *testing.T) {
+	setup := testhelpers.SetupServerConfigTest(t)
+	defer setup.Cleanup()
+
+	svc := NewServerConfigService(setup.DB)
+	wantErr := errors.New("create administrator")
+	created, err := svc.InitWith(model.ModeEnterprise, func(_ *gorm.DB) error {
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("InitWith() error = %v, want %v", err, wantErr)
+	}
+	if created {
+		t.Fatal("InitWith() reported a committed configuration after rollback")
+	}
+
+	config, err := svc.GetConfig()
+	testhelpers.AssertNoError(t, err)
+	if config.Initialized {
+		t.Fatal("enterprise configuration remained initialized after setup rollback")
 	}
 }
 

@@ -3,8 +3,6 @@ package configresolver
 import (
 	"strings"
 	"testing"
-
-	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
 func TestExpandEnvPlaceholders(t *testing.T) {
@@ -71,13 +69,14 @@ func TestResolveConfigEnvVars(t *testing.T) {
 		Command string
 		Headers map[string]string
 	}
+	type secretRef struct{ Env, File string }
 	type testConfig struct {
 		Name        string
 		URL         string
 		Args        []string
 		Env         map[string]string
 		Nested      nestedConfig
-		AccessToken types.AccessTokenRef
+		AccessToken secretRef
 	}
 
 	t.Setenv("MCPJ_TEST_NAME", "affine-main")
@@ -97,7 +96,7 @@ func TestResolveConfigEnvVars(t *testing.T) {
 				"Authorization": "Bearer ${MCPJ_TEST_TOKEN}",
 			},
 		},
-		AccessToken: types.AccessTokenRef{
+		AccessToken: secretRef{
 			Env: "TOKEN_${MCPJ_TEST_NAME}",
 		},
 	}

@@ -1,45 +1,42 @@
-# MCPJungle Docker Compose configuration for individual users.
-# Use this compose file if you want to run MCPJungle locally for your personal MCP management & Gateway.
-# The mcpjungle server runs in development mode.
 services:
-  db:
-    image: postgres:17
-    container_name: mcpjungle-db
+  mysql:
+    image: mysql:8.0
+    container_name: mcpjungle-mysql
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
     environment:
-      POSTGRES_USER: mcpjungle
-      POSTGRES_PASSWORD: mcpjungle
-      POSTGRES_DB: mcpjungle
+      MYSQL_DATABASE: ${MYSQL_DB:-mcpjungle}
+      MYSQL_USER: ${MYSQL_USER:-mcpjungle}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-password}
+      TZ: UTC
     ports:
-      - "5432:5432"
+      - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=mcpjungle pg_isready -U mcpjungle"]
-      interval: 10s
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
     restart: unless-stopped
 
   mcpjungle:
     image: ghcr.io/mcpjungle/mcpjungle:${MCPJUNGLE_IMAGE_TAG:-latest-stdio}
     container_name: mcpjungle-server
     environment:
-      DATABASE_URL: postgres://mcpjungle:mcpjungle@db:5432/mcpjungle
+      DATABASE_URL: mysql://${MYSQL_USER:-mcpjungle}:${MYSQL_PASSWORD:-change-me}@mysql:3306/${MYSQL_DB:-mcpjungle}
       SERVER_MODE: ${SERVER_MODE:-development}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       MCP_SERVER_INIT_REQ_TIMEOUT_SEC: ${MCP_SERVER_INIT_REQ_TIMEOUT_SEC:-10}
+      TZ: UTC
     ports:
       - "${HOST_PORT:-8080}:8080"
     volumes:
-      # Mount host filesystem current directory to enable filesystem MCP server access
       - .:/host:ro
-      # Other options:
-      # - ${HOME}:/host/home:ro
-      # - /tmp:/host/tmp:rw
     depends_on:
-      db:
+      mysql:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
 
 volumes:
-  db_data:
+  mysql_data:

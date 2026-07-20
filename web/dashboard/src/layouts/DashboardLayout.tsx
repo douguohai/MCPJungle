@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Layout, Menu, Button, Dropdown, theme } from "antd";
 import {
   DashboardOutlined,
@@ -15,10 +15,12 @@ import {
   DesktopOutlined,
   TeamOutlined,
   BarChartOutlined,
+  SafetyCertificateOutlined,
+  KeyOutlined,
 } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { clearToken, getUser } from "../store/auth";
-import { overviewApi } from "../api/overview";
+import { useAuth } from "../store/auth";
+import { authApi } from "../api/auth";
 
 const { Header, Sider, Content } = Layout;
 
@@ -34,31 +36,38 @@ const baseMenuItems = [
 
 // Management pages (MCP clients / users / tokens) only make sense in enterprise
 // mode — dev mode has no auth concepts and the backing /v0 endpoints return 403.
+const enterpriseMenuItems = [
+  { key: "/device-tokens", icon: <DesktopOutlined />, label: "我的设备令牌" },
+];
+
 const adminMenuItems = [
-  { key: "/clients", icon: <DesktopOutlined />, label: "MCP 客户端" },
   { key: "/users", icon: <TeamOutlined />, label: "用户" },
+  { key: "/permission-groups", icon: <SafetyCertificateOutlined />, label: "权限组" },
   { key: "/stats", icon: <BarChartOutlined />, label: "调用统计" },
 ];
 
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const [mode, setMode] = useState("");
   const nav = useNavigate();
   const loc = useLocation();
-  const user = getUser();
+  const { mode, user, setUser } = useAuth();
   const { token: themeToken } = theme.useToken();
 
-  useEffect(() => {
-    overviewApi
-      .get()
-      .then((d) => setMode(d.mode))
-      .catch(() => {});
-  }, []);
+  const items =
+    mode === "development"
+      ? baseMenuItems
+      : [
+          ...baseMenuItems,
+          ...enterpriseMenuItems,
+          ...(user?.role === "system_admin" ? adminMenuItems : []),
+        ];
 
-  const items = mode === "development" ? baseMenuItems : [...baseMenuItems, ...adminMenuItems];
-
-  const onLogout = () => {
-    clearToken();
+  const onLogout = async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      setUser(null);
+    }
     nav("/login", { replace: true });
   };
 
@@ -97,7 +106,13 @@ export default function DashboardLayout() {
           <Dropdown
             menu={{
               items: [
-                { key: "logout", icon: <LogoutOutlined />, label: "退出登录", onClick: onLogout },
+                {
+                  key: "password",
+                  icon: <KeyOutlined />,
+                  label: "修改密码",
+                  onClick: () => nav("/change-password"),
+                },
+                { key: "logout", icon: <LogoutOutlined />, label: "退出登录", onClick: () => void onLogout() },
               ],
             }}
           >

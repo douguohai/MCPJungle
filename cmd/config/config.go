@@ -10,13 +10,12 @@ import (
 
 const ClientConfigFileName = ".mcpjungle.conf"
 
-// ClientConfig represents the MCPJungle client configuration stored in the user's home directory.
-// It can contain configuration for both a standard user and an admin user.
+// ClientConfig represents non-secret MCPJungle CLI configuration stored in the
+// user's home directory. Human authentication is handled by the web session;
+// this file must not be used as a credential store.
 type ClientConfig struct {
 	// RegistryURL is the URL of the MCPJungle server.
 	RegistryURL string `yaml:"registry_url"`
-	// AccessToken is the access token used for authentication with the MCPJungle server.
-	AccessToken string `yaml:"access_token"`
 }
 
 // AbsPath returns the absolute path to the client configuration file.
@@ -37,8 +36,8 @@ func Save(c *ClientConfig) error {
 	if err != nil {
 		return err
 	}
-	// 0o600: the config may hold a credential (session token or PAT); restrict
-	// it to the owner.
+	// Keep the file owner-only so future non-secret settings do not accidentally
+	// loosen an existing installation's permissions.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

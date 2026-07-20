@@ -13,8 +13,11 @@ import type {
 import CopyButton from "../components/CopyButton";
 import EmptyStateCard from "../components/EmptyStateCard";
 import ToolGroupForm from "../components/ToolGroupForm";
+import { useAuth } from "../store/auth";
 
 export default function ToolGroupsPage() {
+  const { user } = useAuth();
+  const canManage = user?.role === "system_admin";
   const [data, setData] = useState<DashboardToolGroupsResponse | null>(null);
   const [toolsData, setToolsData] = useState<DashboardTool[]>([]);
   const [error, setError] = useState("");
@@ -71,32 +74,34 @@ export default function ToolGroupsPage() {
           <Button size="small" onClick={() => setDetail(row)}>
             查看工具
           </Button>{" "}
-          <Popconfirm title={`确认删除 ${row.name}？`} onConfirm={() => remove(row.name)}>
-            <Button danger size="small">
-              删除
-            </Button>
-          </Popconfirm>
+          {canManage && (
+            <Popconfirm title={`确认删除 ${row.name}？`} onConfirm={() => remove(row.name)}>
+              <Button danger size="small">
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </>
       ),
     },
   ];
 
-  const addButton = (
+  const addButton = canManage ? (
     <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
       添加
     </Button>
-  );
+  ) : null;
 
   if (data?.empty_state && (!data.tool_groups || data.tool_groups.length === 0)) {
     return (
       <>
         <EmptyStateCard
           state={data.empty_state}
-          action={
+          action={canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               创建第一个工具组
             </Button>
-          }
+          ) : undefined}
         />
         <ToolGroupForm
           open={formOpen}

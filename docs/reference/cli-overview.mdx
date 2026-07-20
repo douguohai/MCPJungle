@@ -22,16 +22,14 @@ The `--registry` flag precedence order is: explicit flag value → `registry_url
 
 On startup, the CLI attempts to read `.mcpjungle.conf` in your home directory.
 
-The file is YAML and contains the following fields:
+The file is YAML and contains the following field:
 
 ```yaml ~/.mcpjungle.conf
 registry_url: http://your-server:8080
-access_token: your-access-token
 ```
 
 | Field | Description                                                                                    |
 |-------|------------------------------------------------------------------------------------------------|
 | `registry_url` | URL of the Mcpjungle server. Overrides the `--registry` default.                               |
-| `access_token` | Auth token that represents the user, sent with every CLI request. Required in enterprise mode only. |
 
-In enterprise mode, this file gets created automatically when you initialise mcpjungle or login using your CLI.
+This file is non-secret. Human authentication uses the Dashboard session cookie and device tokens are issued and managed in the Dashboard, not in `~/.mcpjungle.conf`.

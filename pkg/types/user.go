@@ -4,46 +4,58 @@ package types
 type UserRole string
 
 const (
-	UserRoleAdmin UserRole = "admin"
-	UserRoleUser  UserRole = "user"
+	UserRoleSystemAdmin  UserRole = "system_admin"
+	UserRoleServiceAdmin UserRole = "service_admin"
+	UserRoleMember       UserRole = "member"
+	UserRoleAuditor      UserRole = "auditor"
 )
 
-// UserConfig describes the JSON configuration for creating a user.
-type UserConfig struct {
-	// Username is the unique name of the user to create (mandatory)
-	Username string `json:"name"`
-
-	// AccessToken allows you to provide a custom access token the user can use
-	// to authenticate with MCPJungle.
-	// It is not recommended to use this field in production environments, since
-	// a hard-coded access token can be a security risk.
-	// Instead, use the AccessTokenRef field to load the access token from
-	// a secure location.
-	AccessToken string `json:"access_token"`
-
-	// AccessTokenRef allows you to specify how to load the access token from
-	// an external source. Use this in production scenarios, especially when
-	// you want to commit the user configuration to version control.
-	AccessTokenRef AccessTokenRef `json:"access_token_ref"`
+// IsValidUserRole reports whether role is one of the supported internal
+// account roles.
+func IsValidUserRole(role UserRole) bool {
+	switch role {
+	case UserRoleSystemAdmin, UserRoleServiceAdmin, UserRoleMember, UserRoleAuditor:
+		return true
+	default:
+		return false
+	}
 }
 
-// User represents an authenticated, human user in mcpjungle
-// A user has lesser privileges than an Admin.
-// They can consume mcpjungle but not necessarily manage it.
+// UserStatus represents the lifecycle status of an internal account.
+type UserStatus string
+
+const (
+	UserStatusPending  UserStatus = "pending"
+	UserStatusActive   UserStatus = "active"
+	UserStatusDisabled UserStatus = "disabled"
+)
+
+// IsValidUserStatus reports whether status is one of the supported account
+// lifecycle states.
+func IsValidUserStatus(status UserStatus) bool {
+	switch status {
+	case UserStatusPending, UserStatusActive, UserStatusDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// DeviceTokenScope describes how a personal device token narrows a user's
+// effective service permissions.
+type DeviceTokenScope string
+
+const (
+	DeviceTokenScopeInheritAll DeviceTokenScope = "inherit_all"
+	DeviceTokenScopeRestricted DeviceTokenScope = "restricted"
+)
+
+// User represents an authenticated, human user in mcpjungle.
 type User struct {
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	// AllowedServers restricts which MCP servers this user may access (empty/nil = all).
-	AllowedServers []string `json:"allowed_servers,omitempty"`
-}
-
-type CreateOrUpdateUserRequest struct {
-	Username    string `json:"username"`
-	AccessToken string `json:"access_token,omitempty"`
-}
-
-type CreateOrUpdateUserResponse struct {
-	Username    string `json:"username"`
-	Role        string `json:"role"`
-	AccessToken string `json:"access_token"`
+	ID                 uint   `json:"id,omitempty"`
+	Username           string `json:"username"`
+	DisplayName        string `json:"display_name,omitempty"`
+	Role               string `json:"role"`
+	Status             string `json:"status,omitempty"`
+	MustChangePassword bool   `json:"must_change_password,omitempty"`
 }

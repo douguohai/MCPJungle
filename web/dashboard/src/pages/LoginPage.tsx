@@ -3,20 +3,20 @@ import { Card, Input, Button, message, Typography, Form } from "antd";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api/auth";
 import { extractError } from "../api/client";
-import { setToken, setUser } from "../store/auth";
+import { useAuth } from "../store/auth";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+  const { setUser } = useAuth();
 
   const onSubmit = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
       const res = await authApi.login(values.username.trim(), values.password);
-      setToken(res.token);
-      setUser({ username: res.user.username, role: res.user.role });
+      setUser(res.user);
       message.success("登录成功");
-      nav("/", { replace: true });
+      nav(res.must_change_password ? "/change-password" : "/", { replace: true });
     } catch (e) {
       message.error(extractError(e));
     } finally {
@@ -27,8 +27,7 @@ export default function LoginPage() {
   return (
     <Card title="MCPJungle 管理端登录" style={{ width: 420 }}>
       <Typography.Paragraph type="secondary">
-        使用管理员账号登录。首次使用请通过{" "}
-        <Typography.Text code>mcpjungle init-server</Typography.Text> 初始化并设置管理员密码。
+        使用内部账号登录。若管理员刚为你创建账号，登录后需要先修改一次性初始密码。
       </Typography.Paragraph>
       <Form layout="vertical" onFinish={onSubmit}>
         <Form.Item label="用户名" name="username" rules={[{ required: true, message: "请输入用户名" }]}>

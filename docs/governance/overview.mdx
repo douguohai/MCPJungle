@@ -1,6 +1,6 @@
 ---
 title: "Access and governance overview"
-description: "Understand Mcpjungle's enterprise operating model: authenticated clients, per-client server access, user accounts, and governance for shared deployments."
+description: "Understand Mcpjungle's enterprise operating model: Dashboard-based users, personal device tokens, permission groups, and governance for shared deployments."
 ---
 
 If you're an individual user running mpcjungle locally or for personal use (most likely in development mode), you can skip this section entirely.
@@ -9,17 +9,17 @@ The Governance model is useful for organizations running mcpjungle in a shared e
 
 In enterprise mode, organizations want:
 
-- Authenticated access to MCPs
-- MCP clients must be created explicitly
-- Each client's access to MCPs is controlled through allow-lists
-- Human users are separated from machine identities
+- Authenticated human access through the Dashboard
+- Permission groups for upstream server access
+- Personal device tokens for MCP clients
+- Human users separated from machine identities
 
 ## Development mode versus enterprise mode
 
 | Capability | Development mode | Enterprise mode                   |
 |---|---|-----------------------------------|
-| Gateway authentication | Disabled | Required                          |
-| MCP client access control | Open access to registered servers | Explicit allow-list per client    |
+| Gateway authentication | Disabled | Username/password in the Dashboard; `mcpj_session` for human users and personal device tokens for MCP clients |
+| MCP client access control | Open access to registered servers | Permission groups control access |
 | User accounts | Not needed | Supported                         |
 | OpenTelemetry metrics | Disabled by default | Enabled by default                |
 | Server initialization | Automatic | Manual initialization by an Administrator   |
@@ -30,38 +30,38 @@ Mcpjungle uses three main identity and access concepts in enterprise mode.
 
 ### Administrator
 
-Admin initializes the server, register MCP servers, creates mcp clients, creates users, and manages platform configuration.
+Admin initializes the server, registers MCP servers, and manages users, permission groups, and personal device tokens in the Dashboard.
 
 ### MCP clients
 
-MCP clients are machine identities for your AI clients (agents, CLIs like claude code, IDEs like Cursor, or custom mcp clients).
+MCP clients are non-human consumers of the gateway. They authenticate with personal device tokens, including agents, CLIs like claude code, IDEs like Cursor, and custom agents.
 
 Each client gets:
 
-- an access token
-- an allow-list of upstream MCP servers it may access
+- a personal device token
+- the server access granted by the user's permission groups
 
 ### Users
 
-Users are human identities for people who need authenticated access to Mcpjungle. They have a narrower permission set than admins.
+Users are human identities for people who need authenticated access to Mcpjungle. They sign in with username and password and receive an HttpOnly `mcpj_session` cookie.
 
 ## Typical enterprise flow
 
 <Steps>
   <Step title="Start Mcpjungle in enterprise mode">
-    Deploy the gateway in enterprise mode and connect it to PostgreSQL.
+    Deploy the gateway in enterprise mode and connect it to MySQL 8.0.
   </Step>
   <Step title="Initialize the server">
     Run `mcpjungle init-server` once to create the initial admin identity.
   </Step>
   <Step title="Register MCP servers">
-    Add the upstream servers you want the gateway to expose.
+    Register the upstream servers you want the gateway to expose in the Dashboard.
   </Step>
-  <Step title="Create MCP clients">
-    Create one machine identity per client or workflow and grant access only to the servers that client should reach.
+  <Step title="Create users in the Dashboard">
+    Create pending users, share the one-time initial password, and let each user change it on first sign-in.
   </Step>
-  <Step title="Create users when needed">
-    Create standard users for human operators who need authenticated visibility into Mcpjungle.
+  <Step title="Create permission groups and device tokens">
+    Bind upstream servers to permission groups, then issue one personal device token per MCP client or device.
   </Step>
 </Steps>
 
@@ -83,10 +83,10 @@ That is what enterprise mode is for.
     Configure bearer tokens and custom headers for Mcpjungle's upstream server connections.
   </Card>
   <Card title="Access control" icon="shield-halved" href="/governance/access-control">
-    Create MCP clients and define exactly which servers they can access.
+    Create personal device tokens and define exactly which servers they can access.
   </Card>
   <Card title="Clients and users" icon="users" href="/governance/clients-and-users">
-    Manage machine identities and human accounts cleanly.
+    Manage users, permission groups, and personal device tokens cleanly.
   </Card>
   <Card title="Production deployment" icon="cloud" href="/deployment/production">
     Run Mcpjungle with the expected enterprise operating model.

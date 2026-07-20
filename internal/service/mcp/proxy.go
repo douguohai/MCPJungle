@@ -12,24 +12,24 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
-	serverMode := ctx.Value("mode").(model.ServerMode)
+	serverMode, ok := ctx.Value("mode").(model.ServerMode)
+	if !ok {
+		return errors.New("server mode is missing from MCP request context")
+	}
 	if !model.IsEnterpriseMode(serverMode) {
 		return nil
 	}
-
-	c := ctx.Value("client").(*model.McpClient)
-	if !c.CheckHasServerAccess(serverName) {
-		return fmt.Errorf("client %s is not authorized to access MCP server %s", c.Name, serverName)
+	access, ok := AccessFromContext(ctx)
+	if !ok || access.UserID == 0 || access.DeviceTokenID == 0 {
+		return errors.New("authenticated device token context is required")
 	}
-	if u, ok := ctx.Value("user").(*model.User); ok && u != nil {
-		if !u.CheckAllowedServer(serverName) {
-			return fmt.Errorf("user %s is not permitted to access MCP server %s", u.Username, serverName)
-		}
+	if _, allowed := access.EffectiveServerNames[serverName]; !allowed {
+		return fmt.Errorf("device token is not authorized to access MCP server %s", serverName)
 	}
-
 	return nil
 }
 
@@ -37,20 +37,19 @@ func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
 // count is stored. Best-effort: errors are ignored so analytics never breaks a
 // tool call.
 func (m *MCPService) recordUserCall(ctx context.Context, serverName string) {
-	c, ok := ctx.Value("client").(*model.McpClient)
-	if !ok || c == nil || c.UserID == 0 {
-		return // dev mode or client without an owner user
-	}
-	today := time.Now().UTC().Format("2006-01-02")
-	var stat model.UserCallStat
-	err := m.db.Where("user_id = ? AND server_name = ? AND date = ?", c.UserID, serverName, today).First(&stat).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		_ = m.db.Create(&model.UserCallStat{UserID: c.UserID, ServerName: serverName, Date: today, Count: 1}).Error
+	access, ok := AccessFromContext(ctx)
+	if !ok || access.UserID == 0 {
 		return
 	}
-	if err == nil {
-		_ = m.db.Model(&stat).Update("count", gorm.Expr("count + 1")).Error
-	}
+	today := time.Now().UTC().Format("2006-01-02")
+	stat := model.UserCallStat{UserID: access.UserID, ServerName: serverName, Date: today, Count: 1}
+	_ = m.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "server_name"}, {Name: "date"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"count":      gorm.Expr("count + 1"),
+			"updated_at": time.Now().UTC(),
+		}),
+	}).Create(&stat).Error
 }
 
 // MCPProxyToolCallHandler handles tool calls for the MCP proxy server
@@ -69,9 +68,6 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	if err := authorizeProxyServerAccess(ctx, serverName); err != nil {
 		return nil, err
 	}
-
-	// Record per-user call count for analytics (only the count, never content).
-	m.recordUserCall(ctx, serverName)
 
 	// Record the tool call metrics at the end of the function
 	defer func() {
@@ -107,6 +103,9 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	if err != nil {
 		outcome = telemetry.ToolCallOutcomeError
 		session.invalidateOnError(err) // Invalidate unhealthy stateful sessions
+	} else {
+		// Only successful upstream calls contribute to user-facing usage totals.
+		m.recordUserCall(ctx, serverName)
 	}
 
 	// forward the request to the upstream MCP server and relay the response back

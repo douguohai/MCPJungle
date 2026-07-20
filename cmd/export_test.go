@@ -8,6 +8,12 @@ import (
 )
 
 func TestResolveTargetDirForExport(t *testing.T) {
+	originalWorkingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	defer func() { _ = os.Chdir(originalWorkingDir) }()
+
 	tests := []struct {
 		name          string
 		setup         func() (string, error)
@@ -154,16 +160,17 @@ func TestResolveTargetDirForExport(t *testing.T) {
 			validateDir:   func(t *testing.T, dir string) {},
 		},
 		{
-			name: "invalid permissions for directory creation",
+			name: "parent path prevents directory creation",
 			setup: func() (string, error) {
 				tmpDir := t.TempDir()
-				restrictedDir := filepath.Join(tmpDir, "restricted")
-				_ = os.Mkdir(restrictedDir, 0o000)
-				exportCmdTargetDir = filepath.Join(restrictedDir, "subdir")
+				blockingFile := filepath.Join(tmpDir, "not-a-directory")
+				if err := os.WriteFile(blockingFile, []byte("blocked"), 0o600); err != nil {
+					return "", err
+				}
+				exportCmdTargetDir = filepath.Join(blockingFile, "subdir")
 				return exportCmdTargetDir, nil
 			},
 			cleanup: func(dir string) {
-				_ = os.Chmod(filepath.Dir(dir), 0o755)
 				_ = os.RemoveAll(filepath.Dir(filepath.Dir(dir)))
 			},
 			expectedError: true,

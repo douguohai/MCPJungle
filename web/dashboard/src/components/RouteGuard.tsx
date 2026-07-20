@@ -1,13 +1,27 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { getToken } from "../store/auth";
+import { useAuth } from "../store/auth";
+import type { UserRole } from "../types";
 
-// Redirects to /login when no session is present. A dev-mode marker stored by
-// App's bootstrap also counts as a valid session.
-export default function RequireAuth({ children }: { children: ReactNode }) {
+export default function RequireAuth({
+  children,
+  allowPasswordChange = false,
+  requiredRole,
+}: {
+  children: ReactNode;
+  allowPasswordChange?: boolean;
+  requiredRole?: UserRole;
+}) {
   const location = useLocation();
-  if (!getToken()) {
+  const { user } = useAuth();
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  if (user.must_change_password && !allowPasswordChange) {
+    return <Navigate to="/change-password" replace />;
+  }
+  if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
