@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Button, Switch, Popconfirm, Tooltip, message } from "antd";
+import { Table, Card, Alert, Spin, Button, Switch, Popconfirm, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { PlusOutlined } from "@ant-design/icons";
 import { serversApi } from "../api/servers";
@@ -101,8 +101,14 @@ export default function ServersPage() {
   if (data?.empty_state && (!data.servers || data.servers.length === 0)) {
     return (
       <>
-        <div style={{ marginBottom: 16 }}>{addButton}</div>
-        <EmptyStateCard state={data.empty_state} />
+        <EmptyStateCard
+          state={data.empty_state}
+          action={
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
+              注册第一个 MCP 服务器
+            </Button>
+          }
+        />
         <ServerForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={load} />
       </>
     );
@@ -110,6 +116,9 @@ export default function ServersPage() {
 
   return (
     <Card title="MCP 服务器" extra={addButton}>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        MCP 服务器是你接入的上游 MCP 服务（在线 HTTP 服务或本地命令行程序）。注册后，MCPJungle 会自动发现并代理它提供的工具、提示词和资源。
+      </Typography.Paragraph>
       <Table
         rowKey="name"
         dataSource={data?.servers ?? []}

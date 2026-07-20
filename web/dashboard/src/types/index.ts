@@ -197,3 +197,30 @@ export interface DashboardUser {
   username?: string;
   role?: string;
 }
+
+export interface McpClient {
+  name: string;
+  description: string;
+  user_id?: number;
+  access_token?: string;
+  is_custom_access_token?: boolean;
+  allow_list: string[];
+}
+
+export interface CreateClientInput {
+  name: string;
+  description?: string;
+  allow_list: string[];
+}
+
+export interface CreateUserResponse {
+  username: string;
+  role: string;
+  access_token: string;
+}
+
+export interface UserListItem {
+  username: string;
+  role: string;
+  allowed_servers?: string[] | null;
+}

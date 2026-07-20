@@ -33,6 +33,8 @@ type UserConfig struct {
 type User struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	// AllowedServers restricts which MCP servers this user may access (empty/nil = all).
+	AllowedServers []string `json:"allowed_servers,omitempty"`
 }
 
 type CreateOrUpdateUserRequest struct {

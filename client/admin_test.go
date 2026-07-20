@@ -13,7 +13,8 @@ func TestInitServer(t *testing.T) {
 
 	t.Run("successful initialization", func(t *testing.T) {
 		expectedResponse := InitServerResponse{
-			AdminAccessToken: "admin-token-123",
+			AdminUsername: "admin",
+			Message:       "ok",
 		}
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,13 +51,13 @@ func TestInitServer(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "", &http.Client{})
-		response, err := client.InitServer()
+		response, err := client.InitServer("admin", "testpass")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		if response.AdminAccessToken != expectedResponse.AdminAccessToken {
-			t.Errorf("Expected AdminAccessToken %s, got %s", expectedResponse.AdminAccessToken, response.AdminAccessToken)
+		if response.AdminUsername != expectedResponse.AdminUsername {
+			t.Errorf("Expected AdminUsername %s, got %s", expectedResponse.AdminUsername, response.AdminUsername)
 		}
 	})
 
@@ -68,7 +69,7 @@ func TestInitServer(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "", &http.Client{})
-		response, err := client.InitServer()
+		response, err := client.InitServer("admin", "testpass")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -86,7 +87,7 @@ func TestInitServer(t *testing.T) {
 	t.Run("network error", func(t *testing.T) {
 		// Use an invalid URL to simulate network error
 		client := NewClient("http://invalid-url-that-does-not-exist", "", &http.Client{})
-		response, err := client.InitServer()
+		response, err := client.InitServer("admin", "testpass")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -109,7 +110,7 @@ func TestInitServer(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "", &http.Client{})
-		response, err := client.InitServer()
+		response, err := client.InitServer("admin", "testpass")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -131,7 +132,7 @@ func TestInitServer(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "", &http.Client{})
-		response, err := client.InitServer()
+		response, err := client.InitServer("admin", "testpass")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -159,18 +160,18 @@ func TestInitServerWithAccessToken(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(InitServerResponse{AdminAccessToken: "admin-token"})
+		_ = json.NewEncoder(w).Encode(InitServerResponse{AdminUsername: "admin"})
 	}))
 	defer server.Close()
 
 	// Test with access token (should be ignored for init)
 	client := NewClient(server.URL, "some-token", &http.Client{})
-	response, err := client.InitServer()
+	response, err := client.InitServer("admin", "testpass")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if response.AdminAccessToken != "admin-token" {
-		t.Errorf("Expected AdminAccessToken 'admin-token', got %s", response.AdminAccessToken)
+	if response.AdminUsername != "admin" {
+		t.Errorf("Expected AdminUsername 'admin', got %s", response.AdminUsername)
 	}
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Space, Typography } from "antd";
+import { Table, Card, Alert, Spin, Space, Typography, Button } from "antd";
+import { Link } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import { resourcesApi } from "../api/resources";
 import { extractError } from "../api/client";
@@ -23,7 +24,16 @@ export default function ResourcesPage() {
   if (loading) return <Spin />;
   if (error) return <Alert type="error" message={error} />;
   if (data?.empty_state && (!data.resources || data.resources.length === 0))
-    return <EmptyStateCard state={data.empty_state} />;
+    return (
+      <EmptyStateCard
+        state={data.empty_state}
+        action={
+          <Link to="/servers">
+            <Button type="primary">先去注册 MCP 服务器</Button>
+          </Link>
+        }
+      />
+    );
 
   const columns: ColumnsType<DashboardResource> = [
     {
@@ -44,6 +54,9 @@ export default function ResourcesPage() {
 
   return (
     <Card title="资源">
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        资源是 MCP 服务器暴露的可读数据（如文件、配置、上下文），AI 客户端可按 URI 读取。
+      </Typography.Paragraph>
       <Table
         rowKey="uri"
         dataSource={data?.resources ?? []}

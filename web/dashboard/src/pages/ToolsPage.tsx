@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Switch, Drawer, Tag, Tooltip, Button, message } from "antd";
+import { Table, Card, Alert, Spin, Switch, Drawer, Tag, Tooltip, Button, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { Link } from "react-router-dom";
 import { toolsApi } from "../api/tools";
 import { extractError } from "../api/client";
 import type { DashboardTool, DashboardToolsResponse } from "../types";
@@ -29,7 +30,16 @@ export default function ToolsPage() {
   if (loading && !data) return <Spin />;
   if (error) return <Alert type="error" message={error} />;
   if (data?.empty_state && (!data.tools || data.tools.length === 0))
-    return <EmptyStateCard state={data.empty_state} />;
+    return (
+      <EmptyStateCard
+        state={data.empty_state}
+        action={
+          <Link to="/servers">
+            <Button type="primary">先去注册 MCP 服务器</Button>
+          </Link>
+        }
+      />
+    );
 
   const toggle = async (row: DashboardTool, enabled: boolean) => {
     setToggling(row.canonical_name);
@@ -82,6 +92,9 @@ export default function ToolsPage() {
 
   return (
     <Card title="工具">
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        工具是 MCP 服务器提供的可调用能力（类似函数）。这里列出所有已注册服务器聚合后的全部工具。
+      </Typography.Paragraph>
       <Table
         rowKey="canonical_name"
         dataSource={data?.tools ?? []}

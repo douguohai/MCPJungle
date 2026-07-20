@@ -87,13 +87,6 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 
-		// A personal access token (long-lived API key for CLI/automation).
-		if user, err := s.userService.GetUserByPAT(token); err == nil {
-			c.Set("user", user)
-			c.Next()
-			return
-		}
-
 		// Fall back to a legacy long-lived access token during the migration.
 		if user, err := s.userService.GetUserByAccessToken(token); err == nil {
 			c.Set("user", user)
@@ -125,6 +118,20 @@ func (s *Server) userFromJWT(token string) (*model.User, bool) {
 		Username: claims.Username,
 		Role:     types.UserRole(claims.Role),
 	}, true
+}
+
+// currentUser returns the authenticated user placed in the gin context by
+// verifyUserAuthForAPIAccess, or nil.
+func currentUser(c *gin.Context) *model.User {
+	v, ok := c.Get("user")
+	if !ok {
+		return nil
+	}
+	u, ok := v.(*model.User)
+	if !ok {
+		return nil
+	}
+	return u
 }
 
 // requireAdminUser is middleware that ensures the authenticated user has an admin role when in enterprise mode.
@@ -237,8 +244,14 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 			return
 		}
 
-		// inject the authenticated MCP client in context for the proxy to use
+		// inject the authenticated MCP client + its owner user (for user-level
+		// AllowedServers enforcement) into the request context for the proxy.
 		ctx = context.WithValue(c.Request.Context(), "client", client)
+		if client.UserID > 0 {
+			if user, err := s.userService.GetUserByID(client.UserID); err == nil {
+				ctx = context.WithValue(ctx, "user", user)
+			}
+		}
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

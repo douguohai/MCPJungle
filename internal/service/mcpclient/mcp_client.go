@@ -8,6 +8,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
+	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/gorm"
 )
 
@@ -20,46 +21,44 @@ func NewMCPClientService(db *gorm.DB) *McpClientService {
 	return &McpClientService{db: db}
 }
 
-// ListClients retrieves all MCP clients known to mcpjungle from the database
-func (m *McpClientService) ListClients() ([]*model.McpClient, error) {
+// ListClients returns clients visible to the given user: all clients for admins,
+// only the user's own clients otherwise.
+func (m *McpClientService) ListClients(userID uint, role types.UserRole) ([]*model.McpClient, error) {
 	var clients []*model.McpClient
-	if err := m.db.Find(&clients).Error; err != nil {
+	q := m.db
+	if role != types.UserRoleAdmin {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Find(&clients).Error; err != nil {
 		return nil, err
 	}
 	return clients, nil
 }
 
-// CreateClient creates a new MCP client in the database.
-// It also generates a new access token for the client.
+// CreateClient creates a new MCP client. UserID must be set by the caller (handler).
 func (m *McpClientService) CreateClient(client model.McpClient) (*model.McpClient, error) {
 	if client.AccessToken != "" {
-		// user has supplied a custom access token, validate it
 		if err := internal.ValidateAccessToken(client.AccessToken); err != nil {
 			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
 		}
-		// todo: add audit log entry for custom token usage
 	} else {
-		// no access token is provided by user, generate a new one
 		token, err := internal.GenerateAccessToken()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate access token: %w", err)
 		}
 		client.AccessToken = token
 	}
-
-	// Initialize AllowList with empty array if not provided
 	if client.AllowList == nil {
 		client.AllowList = []byte("[]")
 	}
-
 	if err := m.db.Create(&client).Error; err != nil {
 		return nil, err
 	}
 	return &client, nil
 }
 
-// GetClientByToken retrieves an MCP client by its access token from the database.
-// It returns an error if no such client is found.
+// GetClientByToken retrieves an MCP client by its access token. Used on the MCP
+// proxy hot path (no user context available there).
 func (m *McpClientService) GetClientByToken(token string) (*model.McpClient, error) {
 	var client model.McpClient
 	if err := m.db.Where("access_token = ?", token).First(&client).Error; err != nil {
@@ -71,30 +70,40 @@ func (m *McpClientService) GetClientByToken(token string) (*model.McpClient, err
 	return &client, nil
 }
 
-// DeleteClient removes an MCP client from the database and immediately revokes its access.
-// It is an idempotent operation. Deleting a client that does not exist will not return an error.
-func (m *McpClientService) DeleteClient(name string) error {
-	result := m.db.Unscoped().Where("name = ?", name).Delete(&model.McpClient{})
+// DeleteClient removes a client. Admins can delete any client; others only their own.
+func (m *McpClientService) DeleteClient(userID uint, role types.UserRole, name string) error {
+	q := m.db.Unscoped().Where("name = ?", name)
+	if role != types.UserRoleAdmin {
+		q = q.Where("user_id = ?", userID)
+	}
+	result := q.Delete(&model.McpClient{})
 	return result.Error
 }
 
-// UpdateClient updates an existing MCP client's information in the database.
-// Currently, it only supports updating the access token of the client.
-func (m *McpClientService) UpdateClient(updatedClient model.McpClient) (*model.McpClient, error) {
+// UpdateClient updates a client's AllowList (and access token if supplied).
+// Admins can update any client; others only their own.
+func (m *McpClientService) UpdateClient(userID uint, role types.UserRole, updated model.McpClient) (*model.McpClient, error) {
+	q := m.db.Where("name = ?", updated.Name)
+	if role != types.UserRoleAdmin {
+		q = q.Where("user_id = ?", userID)
+	}
 	var client model.McpClient
-	if err := m.db.Where("name = ?", updatedClient.Name).First(&client).Error; err != nil {
+	if err := q.First(&client).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("client not found: %w", apierrors.ErrNotFound)
 		}
 		return nil, err
 	}
 
-	if err := internal.ValidateAccessToken(updatedClient.AccessToken); err != nil {
-		return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+	if updated.AllowList != nil {
+		client.AllowList = updated.AllowList
 	}
-
-	// Update only the access token for now
-	client.AccessToken = updatedClient.AccessToken
+	if updated.AccessToken != "" {
+		if err := internal.ValidateAccessToken(updated.AccessToken); err != nil {
+			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+		}
+		client.AccessToken = updated.AccessToken
+	}
 
 	if err := m.db.Save(&client).Error; err != nil {
 		return nil, err

@@ -313,6 +313,12 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.POST("/prompts/render", s.getPromptWithArgsHandler())
 
 		userAPI.GET("/users/whoami", requireEnterpriseMode, s.whoAmIHandler())
+
+		// MCP clients: each user manages their own; admins see all (enterprise only).
+		userAPI.GET("/clients", requireEnterpriseMode, s.listMcpClientsHandler())
+		userAPI.POST("/clients", requireEnterpriseMode, s.createMcpClientHandler())
+		userAPI.PUT("/clients/:name", requireEnterpriseMode, s.updateMcpClientHandler())
+		userAPI.DELETE("/clients/:name", requireEnterpriseMode, s.deleteMcpClientHandler())
 	}
 
 	// endpoints only accessible by an admin user in enterprise mode or anyone in development mode
@@ -333,28 +339,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 		adminAPI.POST("/prompts/enable", s.enablePromptsHandler())
 		adminAPI.POST("/prompts/disable", s.disablePromptsHandler())
-
-		// endpoints for managing MCP clients (enterprise mode only)
-		adminAPI.GET(
-			"/clients",
-			requireEnterpriseMode,
-			s.listMcpClientsHandler(),
-		)
-		adminAPI.POST(
-			"/clients",
-			requireEnterpriseMode,
-			s.createMcpClientHandler(),
-		)
-		adminAPI.PUT(
-			"/clients/:name",
-			requireEnterpriseMode,
-			s.updateMcpClientHandler(),
-		)
-		adminAPI.DELETE(
-			"/clients/:name",
-			requireEnterpriseMode,
-			s.deleteMcpClientHandler(),
-		)
 
 		// endpoints for managing human users (enterprise mode only)
 		adminAPI.POST(
@@ -420,11 +404,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			dashboardAPI.GET("/prompts", s.dashboardPromptsHandler())
 			dashboardAPI.GET("/resources", s.dashboardResourcesHandler())
 			dashboardAPI.GET("/diagnostics", s.dashboardDiagnosticsHandler())
-
-			// Personal access tokens: any authenticated user manages their own.
-			dashboardAPI.GET("/tokens", s.dashboardListTokensHandler())
-			dashboardAPI.POST("/tokens", s.dashboardCreateTokenHandler())
-			dashboardAPI.DELETE("/tokens/:id", s.dashboardDeleteTokenHandler())
 		}
 
 		// Mutation endpoints: restricted to admin users in enterprise mode, mirroring

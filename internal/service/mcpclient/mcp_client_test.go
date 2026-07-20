@@ -7,6 +7,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
+	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
 func TestNewMCPClientService(t *testing.T) {
@@ -26,7 +27,7 @@ func TestListClientsEmpty(t *testing.T) {
 
 	svc := NewMCPClientService(setup.DB)
 
-	clients, err := svc.ListClients()
+	clients, err := svc.ListClients(0, types.UserRoleAdmin)
 	testhelpers.AssertNoError(t, err)
 	if len(clients) != 0 {
 		t.Errorf("Expected 0 clients initially, got %d", len(clients))
@@ -204,7 +205,7 @@ func TestDeleteClient(t *testing.T) {
 	testhelpers.AssertNotNil(t, client)
 
 	// Delete client
-	err = svc.DeleteClient(client.Name)
+	err = svc.DeleteClient(0, types.UserRoleAdmin, client.Name)
 	testhelpers.AssertNoError(t, err)
 
 	// Verify client was deleted
@@ -223,7 +224,7 @@ func TestDeleteClientNotFound(t *testing.T) {
 	svc := NewMCPClientService(db)
 
 	// Try to delete non-existent client
-	err = svc.DeleteClient("non-existent-client")
+	err = svc.DeleteClient(0, types.UserRoleAdmin, "non-existent-client")
 	testhelpers.AssertNoError(t, err) // DeleteClient is idempotent and doesn't error on non-existent clients
 }
 
@@ -250,7 +251,7 @@ func TestListClientsWithData(t *testing.T) {
 	}
 
 	// List all clients
-	clients, err := svc.ListClients()
+	clients, err := svc.ListClients(0, types.UserRoleAdmin)
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertEqual(t, 3, len(clients))
 
@@ -311,7 +312,7 @@ func TestUpdateClientAccessToken(t *testing.T) {
 
 	clientInput.AccessToken = "new-access-token"
 
-	client, err := svc.UpdateClient(clientInput)
+	client, err := svc.UpdateClient(0, types.UserRoleAdmin, clientInput)
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertNotNil(t, client)
 
@@ -342,7 +343,7 @@ func TestUpdateClientInvalidAccessToken(t *testing.T) {
 
 	clientInput.AccessToken = "invalid token with spaces"
 
-	client, err := svc.UpdateClient(clientInput)
+	client, err := svc.UpdateClient(0, types.UserRoleAdmin, clientInput)
 	testhelpers.AssertError(t, err)
 	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrInvalidInput), "expected ErrInvalidInput")
 	if client != nil {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Switch, Drawer, Button, message } from "antd";
+import { Table, Card, Alert, Spin, Switch, Drawer, Button, Typography, message } from "antd";
+import { Link } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import { promptsApi } from "../api/prompts";
 import { extractError } from "../api/client";
@@ -29,7 +30,16 @@ export default function PromptsPage() {
   if (loading && !data) return <Spin />;
   if (error) return <Alert type="error" message={error} />;
   if (data?.empty_state && (!data.prompts || data.prompts.length === 0))
-    return <EmptyStateCard state={data.empty_state} />;
+    return (
+      <EmptyStateCard
+        state={data.empty_state}
+        action={
+          <Link to="/servers">
+            <Button type="primary">先去注册 MCP 服务器</Button>
+          </Link>
+        }
+      />
+    );
 
   const toggle = async (row: DashboardPrompt, enabled: boolean) => {
     setToggling(row.canonical_name);
@@ -72,6 +82,9 @@ export default function PromptsPage() {
 
   return (
     <Card title="提示词">
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        提示词是 MCP 服务器提供的可复用提示模板（可带参数），AI 客户端可按名称加载并填充参数后使用。
+      </Typography.Paragraph>
       <Table
         rowKey="canonical_name"
         dataSource={data?.prompts ?? []}

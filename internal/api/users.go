@@ -42,8 +42,9 @@ func (s *Server) listUsersHandler() gin.HandlerFunc {
 		resp := make([]*types.User, len(users))
 		for i, u := range users {
 			resp[i] = &types.User{
-				Username: u.Username,
-				Role:     string(u.Role),
+				Username:       u.Username,
+				Role:           string(u.Role),
+				AllowedServers: u.AllowedServerNames(),
 			}
 		}
 
@@ -64,6 +65,7 @@ func (s *Server) updateUserHandler() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		input.Username = username
 
 		updatedUser, err := s.userService.UpdateUser(&input)
 		if err != nil {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, message } from "antd";
+import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { PlusOutlined } from "@ant-design/icons";
 import { toolGroupsApi } from "../api/toolGroups";
@@ -90,8 +90,14 @@ export default function ToolGroupsPage() {
   if (data?.empty_state && (!data.tool_groups || data.tool_groups.length === 0)) {
     return (
       <>
-        <div style={{ marginBottom: 16 }}>{addButton}</div>
-        <EmptyStateCard state={data.empty_state} />
+        <EmptyStateCard
+          state={data.empty_state}
+          action={
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
+              创建第一个工具组
+            </Button>
+          }
+        />
         <ToolGroupForm
           open={formOpen}
           onClose={() => setFormOpen(false)}
@@ -104,6 +110,9 @@ export default function ToolGroupsPage() {
 
   return (
     <Card title="工具组" extra={addButton}>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        工具组把来自不同 MCP 服务器的多个工具打包成一个虚拟服务，提供独立的调用端点，方便按场景分发给 AI 客户端。
+      </Typography.Paragraph>
       <Table
         rowKey="name"
         dataSource={data?.tool_groups ?? []}

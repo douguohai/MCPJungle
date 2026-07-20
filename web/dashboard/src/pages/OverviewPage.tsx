@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Row, Col, Card, Statistic, Alert, Descriptions, Typography, Spin } from "antd";
+import { Row, Col, Card, Statistic, Alert, Descriptions, Typography, Spin, Button } from "antd";
+import { Link } from "react-router-dom";
 import { overviewApi } from "../api/overview";
 import { extractError } from "../api/client";
 import type { DashboardOverviewResponse } from "../types";
@@ -21,13 +22,27 @@ export default function OverviewPage() {
   if (loading) return <Spin />;
   if (error) return <Alert type="error" message={error} />;
   if (!data) return null;
-  if (data.empty_state) return <EmptyStateCard state={data.empty_state} />;
+  if (data.empty_state) {
+    return (
+      <EmptyStateCard
+        state={data.empty_state}
+        action={
+          <Link to="/servers">
+            <Button type="primary">去注册第一个 MCP 服务器</Button>
+          </Link>
+        }
+      />
+    );
+  }
 
   const statusType = data.status === "running" ? "success" : data.status === "degraded" ? "warning" : "info";
   const statusText = data.status === "running" ? "运行正常" : data.status === "degraded" ? "运行降级" : "状态未知";
 
   return (
     <>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+        MCPJungle 是一个 MCP 网关：把多个 MCP 服务器的工具、提示词、资源统一聚合，AI 客户端只需连接 MCPJungle 一个端点即可使用全部能力。
+      </Typography.Paragraph>
       <Alert showIcon type={statusType} message={statusText} style={{ marginBottom: 16 }} />
       <Row gutter={16}>
         <Col span={6}>

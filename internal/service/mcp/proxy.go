@@ -22,6 +22,11 @@ func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
 	if !c.CheckHasServerAccess(serverName) {
 		return fmt.Errorf("client %s is not authorized to access MCP server %s", c.Name, serverName)
 	}
+	if u, ok := ctx.Value("user").(*model.User); ok && u != nil {
+		if !u.CheckAllowedServer(serverName) {
+			return fmt.Errorf("user %s is not permitted to access MCP server %s", u.Username, serverName)
+		}
+	}
 
 	return nil
 }

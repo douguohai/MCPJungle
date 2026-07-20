@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout, Menu, Button, Dropdown, theme } from "antd";
 import {
   DashboardOutlined,
@@ -12,13 +12,16 @@ import {
   UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  DesktopOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { clearToken, getUser } from "../store/auth";
+import { overviewApi } from "../api/overview";
 
 const { Header, Sider, Content } = Layout;
 
-const menuItems = [
+const baseMenuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "概览" },
   { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务器" },
   { key: "/tools", icon: <ToolOutlined />, label: "工具" },
@@ -28,12 +31,29 @@ const menuItems = [
   { key: "/diagnostics", icon: <ApiOutlined />, label: "诊断" },
 ];
 
+// Management pages (MCP clients / users / tokens) only make sense in enterprise
+// mode — dev mode has no auth concepts and the backing /v0 endpoints return 403.
+const adminMenuItems = [
+  { key: "/clients", icon: <DesktopOutlined />, label: "MCP 客户端" },
+  { key: "/users", icon: <TeamOutlined />, label: "用户" },
+];
+
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mode, setMode] = useState("");
   const nav = useNavigate();
   const loc = useLocation();
   const user = getUser();
   const { token: themeToken } = theme.useToken();
+
+  useEffect(() => {
+    overviewApi
+      .get()
+      .then((d) => setMode(d.mode))
+      .catch(() => {});
+  }, []);
+
+  const items = mode === "development" ? baseMenuItems : [...baseMenuItems, ...adminMenuItems];
 
   const onLogout = () => {
     clearToken();
@@ -55,13 +75,7 @@ export default function DashboardLayout() {
         >
           {collapsed ? "M" : "MCPJungle"}
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[loc.pathname]}
-          items={menuItems}
-          onClick={({ key }) => nav(key)}
-        />
+        <Menu theme="dark" mode="inline" selectedKeys={[loc.pathname]} items={items} onClick={({ key }) => nav(key)} />
       </Sider>
       <Layout>
         <Header

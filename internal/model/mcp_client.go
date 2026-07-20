@@ -15,6 +15,9 @@ type McpClient struct {
 	Name        string `json:"name" gorm:"uniqueIndex;not null;type:varchar(255)"`
 	Description string `json:"description"`
 
+	// UserID is the owning user who created this client for their AI application.
+	UserID      uint   `json:"user_id" gorm:"index"`
+
 	AccessToken string `json:"access_token" gorm:"unique; not null;type:varchar(255)"`
 
 	// AllowList contains a list of MCP Server names that this client is allowed to view and call

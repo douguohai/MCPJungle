@@ -72,6 +72,18 @@ func (u *UserService) GetUserByUsername(username string) (*model.User, error) {
 	return &user, nil
 }
 
+// GetUserByID returns the user with the given primary key.
+func (u *UserService) GetUserByID(id uint) (*model.User, error) {
+	var user model.User
+	if err := u.db.First(&user, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to find user: %w", err)
+	}
+	return &user, nil
+}
+
 // VerifyPassword authenticates a user by username+password. It returns
 // apierrors.ErrInvalidCredentials for any mismatch (unknown user, unset
 // password, or wrong password) so callers cannot distinguish which failed.
@@ -144,14 +156,19 @@ func (u *UserService) UpdateUser(input *model.User) (*model.User, error) {
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
-	if input.AccessToken == "" {
-		return nil, fmt.Errorf("access token cannot be empty: %w", apierrors.ErrInvalidInput)
+	if input.AccessToken == "" && input.AllowedServers == nil {
+		return nil, fmt.Errorf("nothing to update: %w", apierrors.ErrInvalidInput)
 	}
-	// validate the user-provided custom access token
-	if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
-		return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+	// validate the user-provided custom access token (if supplied)
+	if input.AccessToken != "" {
+		if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
+			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
+		}
+		user.AccessToken = input.AccessToken
 	}
-	user.AccessToken = input.AccessToken
+	if input.AllowedServers != nil {
+		user.AllowedServers = input.AllowedServers
+	}
 
 	err = u.db.Save(&user).Error
 	if err != nil {

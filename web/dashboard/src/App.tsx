@@ -14,6 +14,8 @@ import ToolGroupsPage from "./pages/ToolGroupsPage";
 import PromptsPage from "./pages/PromptsPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import ClientsPage from "./pages/ClientsPage";
+import UsersPage from "./pages/UsersPage";
 
 // On first load, probe the backend. In development mode it lets the dashboard
 // in without a token; in enterprise mode the probe 401s and we show the login
@@ -75,6 +77,8 @@ export default function App() {
         <Route path="prompts" element={<PromptsPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />
+        <Route path="clients" element={<ClientsPage />} />
+        <Route path="users" element={<UsersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
