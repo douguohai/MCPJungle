@@ -1,6 +1,9 @@
 import { ApiOutlined, ApartmentOutlined, RightOutlined } from "@ant-design/icons";
-import { Card, Col, Row, Space, Typography } from "antd";
+import { Button, Card, Col, Form, Input, message, Row, Space, Typography } from "antd";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { extractError } from "../api/client";
+import { defaultDashboardSettings, settingsApi, type DashboardSettings } from "../api/settings";
 
 const settings = [
   {
@@ -18,6 +21,32 @@ const settings = [
 ];
 
 export default function SystemSettingsPage() {
+  const [form] = Form.useForm<DashboardSettings>();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    settingsApi
+      .get()
+      .then((value) => form.setFieldsValue(value))
+      .catch((e) => message.error(extractError(e)))
+      .finally(() => setLoading(false));
+  }, [form]);
+
+  const onSave = async (values: DashboardSettings) => {
+    setSaving(true);
+    try {
+      const saved = await settingsApi.update(values);
+      form.setFieldsValue(saved);
+      message.success("系统名称已更新");
+    } catch (e) {
+      message.error(extractError(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="page-stack">
       <div>
@@ -28,6 +57,29 @@ export default function SystemSettingsPage() {
           面向系统管理员的运行维护与高级能力配置。
         </Typography.Text>
       </div>
+      <Card title="基础信息" loading={loading}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={onSave}
+          initialValues={defaultDashboardSettings}
+        >
+          <Form.Item
+            label="系统名称"
+            name="system_display_name"
+            extra="展示在登录页和后台左侧导航，不改变接口路径、数据库名称或 MCP 服务名称。"
+            rules={[
+              { required: true, message: "请输入系统名称" },
+              { max: 64, message: "系统名称最多 64 个字符" },
+            ]}
+          >
+            <Input placeholder={defaultDashboardSettings.system_display_name} maxLength={64} showCount />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={saving}>
+            保存设置
+          </Button>
+        </Form>
+      </Card>
       <Row gutter={[16, 16]}>
         {settings.map((item) => (
           <Col xs={24} lg={12} key={item.path}>
@@ -53,4 +105,3 @@ export default function SystemSettingsPage() {
     </div>
   );
 }
-

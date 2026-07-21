@@ -3,6 +3,7 @@ import { Row, Col, Card, Statistic, Alert, Descriptions, Typography, Spin, Butto
 import { Link } from "react-router-dom";
 import { overviewApi } from "../api/overview";
 import { extractError } from "../api/client";
+import { useDashboardSettings } from "../hooks/useDashboardSettings";
 import type { DashboardOverviewResponse } from "../types";
 import EmptyStateCard from "../components/EmptyStateCard";
 
@@ -10,6 +11,7 @@ export default function OverviewPage() {
   const [data, setData] = useState<DashboardOverviewResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const settings = useDashboardSettings();
 
   useEffect(() => {
     overviewApi
@@ -41,27 +43,27 @@ export default function OverviewPage() {
   return (
     <>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        MCPJungle 统一接入团队内部的 MCP 服务，并按用户和权限组分配访问范围；每次调用都可追溯到具体身份和设备令牌。
+        {settings.system_display_name} 统一接入团队内部的 MCP 服务，并按用户和权限组分配访问范围；每次调用都可追溯到具体身份和设备令牌。
       </Typography.Paragraph>
       <Alert showIcon type={statusType} message={statusText} style={{ marginBottom: 16 }} />
-      <Row gutter={16}>
-        <Col span={6}>
-          <Card extra={<Link to="/servers">查看</Link>}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} xl={6}>
+          <Card className="metric-card" extra={<Link to="/servers">查看</Link>}>
             <Statistic title="MCP 服务" value={data.server_count} />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card extra={<Link to="/servers">查看</Link>}>
+        <Col xs={24} sm={12} xl={6}>
+          <Card className="metric-card" extra={<Link to="/servers">查看</Link>}>
             <Statistic title="工具" value={data.tool_count} />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card extra={<Link to="/servers">查看</Link>}>
+        <Col xs={24} sm={12} xl={6}>
+          <Card className="metric-card" extra={<Link to="/servers">查看</Link>}>
             <Statistic title="提示模板" value={data.prompt_count} />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card extra={<Link to="/servers">查看</Link>}>
+        <Col xs={24} sm={12} xl={6}>
+          <Card className="metric-card" extra={<Link to="/servers">查看</Link>}>
             <Statistic title="数据资源" value={data.resource_count} />
           </Card>
         </Col>

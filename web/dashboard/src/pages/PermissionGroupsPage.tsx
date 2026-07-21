@@ -193,7 +193,7 @@ export default function PermissionGroupsPage() {
   }));
 
   return (
-    <>
+    <div className="page-stack page-container">
       <Card
         title="权限组"
         extra={
@@ -201,12 +201,20 @@ export default function PermissionGroupsPage() {
             创建权限组
           </Button>
         }
+        className="responsive-card"
       >
         <Typography.Paragraph type="secondary">
           用户最终可访问的 MCP 服务，是其所有已启用权限组所绑定服务的并集。停用权限组会立即撤销该组授权。
         </Typography.Paragraph>
         {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
-        <Table rowKey="ID" dataSource={groups} columns={columns} loading={loading} pagination={{ pageSize: 20 }} />
+        <Table
+          rowKey="ID"
+          dataSource={groups}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+          scroll={{ x: 820 }}
+        />
       </Card>
 
       <Modal
@@ -268,6 +276,6 @@ export default function PermissionGroupsPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, Typography, message } from "antd";
+import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, Typography, message, Row, Col, Statistic, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { PlusOutlined } from "@ant-design/icons";
+import { ApiOutlined, PlusOutlined, ToolOutlined } from "@ant-design/icons";
 import { useSearchParams } from "react-router-dom";
 import { toolGroupsApi } from "../api/toolGroups";
 import { toolsApi } from "../api/tools";
@@ -111,15 +111,59 @@ export default function ToolGroupsPage() {
 
   const addButton = canManage ? (
     <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-      添加
+      创建能力组合
     </Button>
   ) : null;
 
+  const groupRows = data?.tool_groups ?? [];
+  const totalGroupedTools = groupRows.reduce((sum, groupItem) => sum + groupItem.tool_count, 0);
+
+  const content = (
+    <>
+      <div className="page-heading">
+        <div className="page-heading-copy">
+          <Typography.Title level={3} style={{ marginTop: 0 }}>能力中心</Typography.Title>
+          <Typography.Paragraph type="secondary">
+            把多个 MCP 工具组合成面向场景的独立端点，例如“研发检索”“运维诊断”“数据查询”。外部客户端可以只接入一个组合端点，避免暴露全部工具。
+          </Typography.Paragraph>
+        </div>
+        {addButton}
+      </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card className="metric-card">
+            <Statistic prefix={<ApiOutlined />} title="能力组合" value={groupRows.length} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="metric-card">
+            <Statistic prefix={<ToolOutlined />} title="可选工具" value={toolsData.length} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="metric-card">
+            <Statistic title="已编排工具引用" value={totalGroupedTools} />
+          </Card>
+        </Col>
+      </Row>
+      <Alert
+        showIcon
+        type="info"
+        message="什么时候使用能力组合"
+        description="如果某个客户端或团队只需要固定几类工具，就为它创建能力组合；如果用户需要按权限组访问多个完整 MCP 服务，则直接使用全局 /mcp 入口即可。"
+      />
+    </>
+  );
+
   if (data?.empty_state && (!data.tool_groups || data.tool_groups.length === 0)) {
     return (
-      <>
+      <div className="page-stack page-container">
+        {content}
         <EmptyStateCard
-          state={data.empty_state}
+          state={{
+            title: "还没有能力组合",
+            description: "可以从 MCP 服务详情页选择工具，也可以在这里手动创建面向场景的组合端点。",
+          }}
           action={canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               创建第一个能力组合
@@ -133,22 +177,23 @@ export default function ToolGroupsPage() {
           tools={toolsData}
           initialTools={initialTools}
         />
-      </>
+      </div>
     );
   }
 
   return (
-    <Card title="能力组合" extra={addButton}>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        能力组合把多个 MCP 工具编排为一个独立调用端点，适合按业务场景交付给 AI 客户端。人员访问范围仍由权限组控制。
-      </Typography.Paragraph>
-      <Table
-        rowKey="name"
-        dataSource={data?.tool_groups ?? []}
-        columns={columns}
-        loading={loading}
-        pagination={{ pageSize: 20 }}
-      />
+    <div className="page-stack page-container">
+      {content}
+      <Card title="组合列表" className="responsive-card">
+        <Table
+          rowKey="name"
+          dataSource={groupRows}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+          scroll={{ x: 860 }}
+        />
+      </Card>
       <ToolGroupForm
         open={formOpen}
         onClose={closeForm}
@@ -157,12 +202,32 @@ export default function ToolGroupsPage() {
         initialTools={initialTools}
       />
       <Drawer title={detail?.name} open={!!detail} onClose={() => setDetail(null)} width={480}>
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Paragraph type="secondary">
+            该组合会作为独立 MCP 端点暴露，客户端只会发现组合内的工具。
+          </Typography.Paragraph>
+          {detail && (
+            <Space wrap>
+              <Tag color="blue">工具 {detail.tool_count}</Tag>
+              <CopyButton text={detail.streamable_http_endpoint} label="复制 HTTP 端点" />
+              <CopyButton text={detail.sse_endpoint} label="复制 SSE 端点" />
+            </Space>
+          )}
+        </Space>
         <List
+          style={{ marginTop: 16 }}
           size="small"
           dataSource={detail?.tools ?? []}
-          renderItem={(t) => <List.Item>{t.canonical_name}</List.Item>}
+          renderItem={(t) => (
+            <List.Item>
+              <List.Item.Meta
+                title={<Typography.Text code>{t.canonical_name}</Typography.Text>}
+                description={t.description || t.server}
+              />
+            </List.Item>
+          )}
         />
       </Drawer>
-    </Card>
+    </div>
   );
 }

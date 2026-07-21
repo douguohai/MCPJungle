@@ -11,6 +11,7 @@ import {
   Radio,
   Select,
   Space,
+  Steps,
   Spin,
   Table,
   Tag,
@@ -24,6 +25,7 @@ import { deviceTokensApi } from "../api/deviceTokens";
 import { serversApi } from "../api/servers";
 import { extractError } from "../api/client";
 import type { DashboardServer, DeviceToken, DeviceTokenScope } from "../types";
+import CopyButton from "../components/CopyButton";
 
 interface TokenFormValues {
   name: string;
@@ -42,6 +44,7 @@ export default function DeviceTokensPage() {
   const [plainToken, setPlainToken] = useState<string | null>(null);
   const [form] = Form.useForm<TokenFormValues>();
   const scope = Form.useWatch("scope", form);
+  const endpoint = `${window.location.origin}/mcp`;
 
   const load = async () => {
     setLoading(true);
@@ -118,10 +121,15 @@ export default function DeviceTokensPage() {
     },
     {
       title: "最近使用",
-      dataIndex: "last_used_at",
-      width: 180,
-      render: (value?: string) =>
-        value ? new Date(value).toLocaleString("zh-CN") : "尚未使用",
+      key: "last_used",
+      width: 220,
+      render: (_, token) =>
+        token.last_used_at ? (
+          <Space direction="vertical" size={0}>
+            <Typography.Text>{new Date(token.last_used_at).toLocaleString("zh-CN")}</Typography.Text>
+            {token.last_used_ip && <Typography.Text type="secondary">{token.last_used_ip}</Typography.Text>}
+          </Space>
+        ) : "尚未使用",
     },
     {
       title: "状态",
@@ -156,8 +164,40 @@ export default function DeviceTokensPage() {
     .filter((server) => server.enabled)
     .map((server) => ({ value: server.id, label: server.name }));
 
+  const cursorConfig = plainToken
+    ? JSON.stringify(
+        {
+          mcpServers: {
+            mcpjungle: {
+              url: endpoint,
+              headers: {
+                Authorization: `Bearer ${plainToken}`,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )
+    : "";
+
+  const mcpRemoteConfig = plainToken
+    ? JSON.stringify(
+        {
+          mcpServers: {
+            mcpjungle: {
+              command: "npx",
+              args: ["-y", "mcp-remote", endpoint, "--header", `Authorization: Bearer ${plainToken}`],
+            },
+          },
+        },
+        null,
+        2,
+      )
+    : "";
+
   return (
-    <>
+    <div className="page-stack page-container">
       <Card
         title="我的设备令牌"
         extra={
@@ -166,8 +206,25 @@ export default function DeviceTokensPage() {
           </Button>
         }
       >
+        <Alert
+          showIcon
+          type="info"
+          style={{ marginBottom: 16 }}
+          message="设备令牌是 MCP 客户端专用凭据"
+          description={
+            <Steps
+              size="small"
+              responsive
+              items={[
+                { title: "创建令牌", description: "每台电脑或客户端一个令牌" },
+                { title: "复制配置", description: "粘贴到 Cursor、Claude Desktop 或自研客户端" },
+                { title: "按人追踪", description: "调用量归属到当前登录用户和设备令牌" },
+              ]}
+            />
+          }
+        />
         <Typography.Paragraph type="secondary">
-          设备令牌用于 MCP 客户端连接，不用于登录管理后台。令牌明文只在创建成功时展示一次。
+          设备令牌用于 MCP 客户端连接，不用于登录管理后台。令牌明文只在创建成功时展示一次；如果丢失，请吊销后重新创建。
         </Typography.Paragraph>
         {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
         <Table
@@ -230,10 +287,33 @@ export default function DeviceTokensPage() {
         }
       >
         <Alert type="warning" showIcon message="关闭后无法再次查看，请立即复制到 MCP 客户端。" style={{ marginBottom: 16 }} />
-        <Typography.Paragraph code copyable style={{ wordBreak: "break-all" }}>
-          {plainToken}
-        </Typography.Paragraph>
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <div>
+            <Typography.Text strong>令牌</Typography.Text>
+            <Typography.Paragraph code copyable style={{ wordBreak: "break-all", marginTop: 8 }}>
+              {plainToken}
+            </Typography.Paragraph>
+          </div>
+          <div>
+            <Space align="center" style={{ marginBottom: 8 }}>
+              <Typography.Text strong>Cursor / 支持 Streamable HTTP 的客户端</Typography.Text>
+              <CopyButton text={cursorConfig} />
+            </Space>
+            <Typography.Paragraph code style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {cursorConfig}
+            </Typography.Paragraph>
+          </div>
+          <div>
+            <Space align="center" style={{ marginBottom: 8 }}>
+              <Typography.Text strong>Claude Desktop / mcp-remote</Typography.Text>
+              <CopyButton text={mcpRemoteConfig} />
+            </Space>
+            <Typography.Paragraph code style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {mcpRemoteConfig}
+            </Typography.Paragraph>
+          </div>
+        </Space>
       </Modal>
-    </>
+    </div>
   );
 }

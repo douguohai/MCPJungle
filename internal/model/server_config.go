@@ -30,6 +30,10 @@ type ServerConfig struct {
 	// Initialized indicates whether the server has been initialized.
 	// If this is set to false, the server is not yet ready for use and all requests to it should be rejected.
 	Initialized bool `gorm:"not null;default:false"`
+
+	// SystemDisplayName is the operator-facing product name shown in the dashboard.
+	// It is intentionally presentation-only and does not affect API routing or MCP identity.
+	SystemDisplayName string `gorm:"type:varchar(64);not null;default:'MCPJungle'"`
 }
 
 func (c *ServerConfig) BeforeSave(tx *gorm.DB) (err error) {

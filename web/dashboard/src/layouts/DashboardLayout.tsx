@@ -10,6 +10,7 @@ import {
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../store/auth";
 import { authApi } from "../api/auth";
+import { useDashboardSettings } from "../hooks/useDashboardSettings";
 import { buildMenuItems, selectedMenuKey } from "../navigation";
 
 const { Header, Sider, Content } = Layout;
@@ -19,6 +20,7 @@ export default function DashboardLayout() {
   const nav = useNavigate();
   const loc = useLocation();
   const { user, setUser } = useAuth();
+  const settings = useDashboardSettings();
   const { token: themeToken } = theme.useToken();
 
   const items = buildMenuItems(user?.role);
@@ -33,10 +35,12 @@ export default function DashboardLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <Layout className="dashboard-shell">
       <Sider width={224} trigger={null} collapsible collapsed={collapsed}>
         <div className={collapsed ? "dashboard-brand collapsed" : "dashboard-brand"}>
-          <div>{collapsed ? "M" : "MCPJungle"}</div>
+          <div title={settings.system_display_name}>
+            {collapsed ? settings.system_display_name.slice(0, 1).toUpperCase() : settings.system_display_name}
+          </div>
           {!collapsed && <small>企业内部 MCP Hub</small>}
         </div>
         <Menu
@@ -47,7 +51,7 @@ export default function DashboardLayout() {
           onClick={({ key }) => nav(key)}
         />
       </Sider>
-      <Layout>
+      <Layout className="dashboard-main">
         <Header
           style={{
             padding: "0 16px",
@@ -81,8 +85,9 @@ export default function DashboardLayout() {
           </Dropdown>
         </Header>
         <Content
+          className="dashboard-content"
           style={{
-            margin: 24,
+            padding: 24,
             minHeight: 280,
           }}
         >

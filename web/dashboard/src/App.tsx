@@ -17,9 +17,12 @@ import DeviceTokensPage from "./pages/DeviceTokensPage";
 import PermissionGroupsPage from "./pages/PermissionGroupsPage";
 import ServerDetailPage from "./pages/ServerDetailPage";
 import SystemSettingsPage from "./pages/SystemSettingsPage";
+import { useDocumentTitle } from "./hooks/useDocumentTitle";
 
 export default function App() {
   const { ready } = useAuth();
+  useDocumentTitle();
+
   if (!ready) {
     return (
       <div

@@ -383,6 +383,7 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			requireDashboardMode,
 		)
 		{
+			dashboardPublicAPI.GET("/settings", s.dashboardSettingsHandler())
 			dashboardPublicAPI.POST("/auth/verify", s.dashboardVerifyTokenHandler())
 			dashboardPublicAPI.POST("/auth/login", s.dashboardLoginHandler())
 		}
@@ -425,6 +426,7 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 			// Analytics: per-user per-server call counts (admin only).
 			dashboardAdminAPI.GET("/stats", s.dashboardCallStatsHandler())
+			dashboardAdminAPI.PUT("/settings", s.dashboardUpdateSettingsHandler())
 		}
 	}
 

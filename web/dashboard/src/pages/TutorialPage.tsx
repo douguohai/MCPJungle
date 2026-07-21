@@ -1,6 +1,7 @@
 import { Alert, Card, Col, Divider, Row, Space, Steps, Typography } from "antd";
 import { Link } from "react-router-dom";
 import CopyButton from "../components/CopyButton";
+import { useDashboardSettings } from "../hooks/useDashboardSettings";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -33,6 +34,8 @@ const claudeConfig = `{
 const groupEndpoint = "http://127.0.0.1:8080/v0/groups/<group-name>/mcp";
 
 export default function TutorialPage() {
+  const settings = useDashboardSettings();
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <Card>
@@ -40,7 +43,7 @@ export default function TutorialPage() {
           外部如何使用内部 MCP
         </Title>
         <Paragraph type="secondary">
-          外部客户端只需要 MCPJungle 地址和一个设备令牌。工具、提示模板、数据资源由客户端通过 MCP 协议自动发现；管理员在 dashboard 内负责服务注册、权限组授权、能力组合和调用观察。
+          外部客户端只需要 {settings.system_display_name} 地址和一个设备令牌。工具、提示模板、数据资源由客户端通过 MCP 协议自动发现；管理员在控制台内负责服务注册、权限组授权、能力组合和调用观察。
         </Paragraph>
         <Alert
           showIcon

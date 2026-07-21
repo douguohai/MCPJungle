@@ -1,5 +1,6 @@
 import type { MenuProps } from "antd";
 import {
+  AppstoreAddOutlined,
   BarChartOutlined,
   CloudServerOutlined,
   DashboardOutlined,
@@ -24,6 +25,11 @@ export function buildMenuItems(role?: UserRole): MenuItem[] {
     ]),
     group("services", "服务中心", [
       { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务" },
+      {
+        key: "/settings/ability-combinations",
+        icon: <AppstoreAddOutlined />,
+        label: "能力中心",
+      },
     ]),
     group("personal", "个人接入", [
       { key: "/device-tokens", icon: <DesktopOutlined />, label: "我的设备令牌" },
@@ -65,6 +71,7 @@ export function buildMenuItems(role?: UserRole): MenuItem[] {
 
 export function selectedMenuKey(pathname: string): string {
   if (pathname.startsWith("/servers/")) return "/servers";
+  if (pathname.startsWith("/settings/ability-combinations")) return "/settings/ability-combinations";
   if (pathname.startsWith("/settings/")) return "/settings";
   return pathname;
 }

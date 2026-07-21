@@ -20,7 +20,7 @@ import {
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ArrowLeftOutlined } from "@ant-design/icons";
+import { ApiOutlined, ArrowLeftOutlined, AppstoreAddOutlined, DatabaseOutlined, FunctionOutlined, ReadOutlined } from "@ant-design/icons";
 import { Link, useParams } from "react-router-dom";
 import { serversApi } from "../api/servers";
 import { toolsApi } from "../api/tools";
@@ -122,18 +122,25 @@ export default function ServerDetailPage() {
       {
         title: "名称",
         dataIndex: "name",
+        width: 260,
         render: (name: string, row) => (
-          <Space size={8}>
-            <Typography.Text>{name}</Typography.Text>
+          <Space size={8} wrap>
+            <Typography.Text strong>{name}</Typography.Text>
             <CopyButton text={row.canonical_name} />
           </Space>
         ),
       },
-      { title: "描述", dataIndex: "description", ellipsis: true },
+      {
+        title: "用途说明",
+        dataIndex: "description",
+        render: (description?: string) => description || <Typography.Text type="secondary">暂无描述</Typography.Text>,
+      },
       {
         title: "注解",
         dataIndex: "annotation_keys",
-        render: (keys: string[] = []) => keys.map((key) => <Tag key={key}>{key}</Tag>),
+        width: 180,
+        render: (keys: string[] = []) =>
+          keys.length ? keys.map((key) => <Tag key={key}>{key}</Tag>) : <Typography.Text type="secondary">-</Typography.Text>,
       },
       {
         title: "启用",
@@ -154,7 +161,7 @@ export default function ServerDetailPage() {
         title: "操作",
         width: 200,
         render: (_, row) => (
-          <Space size={8}>
+          <Space size={8} wrap>
             <Button onClick={() => setToolDetail(row)}>查看输入</Button>
             {canManage && (
               <Link to={`/settings/ability-combinations?tools=${encodeURIComponent(row.canonical_name)}`}>
@@ -173,14 +180,19 @@ export default function ServerDetailPage() {
       {
         title: "名称",
         dataIndex: "name",
+        width: 260,
         render: (name: string, row) => (
-          <Space size={8}>
-            <Typography.Text>{name}</Typography.Text>
+          <Space size={8} wrap>
+            <Typography.Text strong>{name}</Typography.Text>
             <CopyButton text={row.canonical_name} />
           </Space>
         ),
       },
-      { title: "描述", dataIndex: "description", ellipsis: true },
+      {
+        title: "用途说明",
+        dataIndex: "description",
+        render: (description?: string) => description || <Typography.Text type="secondary">暂无描述</Typography.Text>,
+      },
       {
         title: "启用",
         dataIndex: "enabled",
@@ -209,8 +221,9 @@ export default function ServerDetailPage() {
     {
       title: "URI",
       dataIndex: "uri",
+      width: 320,
       render: (uri: string) => (
-        <Space>
+        <Space wrap>
           <Typography.Text code>{uri}</Typography.Text>
           <CopyButton text={uri} />
         </Space>
@@ -218,7 +231,11 @@ export default function ServerDetailPage() {
     },
     { title: "名称", dataIndex: "name" },
     { title: "MIME 类型", dataIndex: "mime_type" },
-    { title: "描述", dataIndex: "description", ellipsis: true },
+    {
+      title: "用途说明",
+      dataIndex: "description",
+      render: (description?: string) => description || <Typography.Text type="secondary">暂无描述</Typography.Text>,
+    },
   ];
 
   if (loading && !data) return <Spin size="large" />;
@@ -234,19 +251,39 @@ export default function ServerDetailPage() {
   }
 
   const { server, tools, prompts, resources } = data;
+  const enabledTools = tools.filter((item) => item.enabled).length;
+  const enabledPrompts = prompts.filter((item) => item.enabled).length;
+  const enabledResources = resources.filter((item) => item.enabled).length;
   const overview = (
     <div className="page-stack">
       <Row gutter={[16, 16]}>
-        <Col xs={12} lg={6}><Card><Statistic title="工具" value={tools.length} /></Card></Col>
-        <Col xs={12} lg={6}><Card><Statistic title="提示模板" value={prompts.length} /></Card></Col>
-        <Col xs={12} lg={6}><Card><Statistic title="数据资源" value={resources.length} /></Card></Col>
-        <Col xs={12} lg={6}><Card><Statistic title="已启用能力" value={tools.filter((item) => item.enabled).length + prompts.filter((item) => item.enabled).length + resources.filter((item) => item.enabled).length} /></Card></Col>
+        <Col xs={24} md={12} xl={6}><Card className="metric-card"><Statistic prefix={<FunctionOutlined />} title="工具" value={tools.length} suffix={`/${enabledTools} 启用`} /></Card></Col>
+        <Col xs={24} md={12} xl={6}><Card className="metric-card"><Statistic prefix={<ReadOutlined />} title="提示模板" value={prompts.length} suffix={`/${enabledPrompts} 启用`} /></Card></Col>
+        <Col xs={24} md={12} xl={6}><Card className="metric-card"><Statistic prefix={<DatabaseOutlined />} title="数据资源" value={resources.length} suffix={`/${enabledResources} 启用`} /></Card></Col>
+        <Col xs={24} md={12} xl={6}><Card className="metric-card"><Statistic prefix={<ApiOutlined />} title="总能力" value={tools.length + prompts.length + resources.length} /></Card></Col>
       </Row>
+      <Alert
+        showIcon
+        type="info"
+        message="能力如何二次利用"
+        description="工具适合直接调用或加入能力组合；提示模板用于复用固定提示结构；数据资源用于让客户端按 URI 读取上下文。客户端通过设备令牌连接 /mcp 后会自动发现这些能力。"
+        action={
+          canManage ? (
+            <Link to={`/settings/ability-combinations?server=${encodeURIComponent(server.name)}`}>
+              <Button size="small" icon={<AppstoreAddOutlined />}>用该服务创建组合</Button>
+            </Link>
+          ) : undefined
+        }
+      />
       <Card title="服务信息">
         <Descriptions column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="传输协议"><TransportTag transport={server.transport} /></Descriptions.Item>
           <Descriptions.Item label="运行状态"><StatusBadge status={server.status} /></Descriptions.Item>
-          <Descriptions.Item label="配置摘要" span={2}>{server.config_summary?.sanitized_summary || server.connection_summary}</Descriptions.Item>
+          <Descriptions.Item label="配置摘要" span={2}>
+            <Typography.Text style={{ wordBreak: "break-word" }}>
+              {server.config_summary?.sanitized_summary || server.connection_summary}
+            </Typography.Text>
+          </Descriptions.Item>
           <Descriptions.Item label="最近发现">{server.last_discovered_at || "尚未完成发现"}</Descriptions.Item>
           <Descriptions.Item label="最近更新">{server.updated_at || "-"}</Descriptions.Item>
         </Descriptions>
@@ -266,19 +303,19 @@ export default function ServerDetailPage() {
               <Button>用该服务工具创建能力组合</Button>
             </Link>
           )}
-          <Table rowKey="canonical_name" columns={toolColumns} dataSource={tools} pagination={{ pageSize: 20 }} />
+          <Table rowKey="canonical_name" columns={toolColumns} dataSource={tools} pagination={{ pageSize: 20 }} scroll={{ x: 920 }} />
         </Space>
       ) : <CapabilityEmpty label="工具" />,
     },
     {
       key: "prompts",
       label: `提示模板 ${prompts.length}`,
-      children: prompts.length ? <Table rowKey="canonical_name" columns={promptColumns} dataSource={prompts} pagination={{ pageSize: 20 }} /> : <CapabilityEmpty label="提示模板" />,
+      children: prompts.length ? <Table rowKey="canonical_name" columns={promptColumns} dataSource={prompts} pagination={{ pageSize: 20 }} scroll={{ x: 760 }} /> : <CapabilityEmpty label="提示模板" />,
     },
     {
       key: "resources",
       label: `数据资源 ${resources.length}`,
-      children: resources.length ? <Table rowKey="uri" columns={resourceColumns} dataSource={resources} pagination={{ pageSize: 20 }} /> : <CapabilityEmpty label="数据资源" />,
+      children: resources.length ? <Table rowKey="uri" columns={resourceColumns} dataSource={resources} pagination={{ pageSize: 20 }} scroll={{ x: 900 }} /> : <CapabilityEmpty label="数据资源" />,
     },
     {
       key: "diagnostics",
@@ -311,11 +348,13 @@ export default function ServerDetailPage() {
             <Typography.Title level={3} style={{ margin: 0 }}>{server.name}</Typography.Title>
             <StatusBadge status={server.status} />
           </Space>
-          <Typography.Text type="secondary">{server.connection_summary}</Typography.Text>
+          <Typography.Text type="secondary" ellipsis={{ tooltip: server.connection_summary }}>
+            {server.connection_summary}
+          </Typography.Text>
         </div>
         <TransportTag transport={server.transport} />
       </div>
-      <Card className="service-tabs-card"><Tabs items={tabs} /></Card>
+      <Card className="service-tabs-card responsive-card"><Tabs items={tabs} /></Card>
       <Drawer title={toolDetail?.canonical_name} open={!!toolDetail} onClose={() => setToolDetail(null)} width={560}>
         {toolDetail && <JsonViewer value={toolDetail.input_schema ?? toolDetail.input_preview} />}
       </Drawer>

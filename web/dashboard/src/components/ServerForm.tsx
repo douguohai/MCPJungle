@@ -127,7 +127,7 @@ export default function ServerForm({ open, onClose, onCreated }: Props) {
         <Form.Item
           name="transport"
           label="传输协议"
-          tooltip="决定 MCPJungle 如何连接该服务。不确定时选 Streamable HTTP。"
+          tooltip="决定本系统如何连接该服务。不确定时选 Streamable HTTP。"
           rules={[{ required: true }]}
         >
           <Select

@@ -185,7 +185,7 @@ export default function UsersPage() {
   if (loading && accounts.length === 0) return <Spin />;
 
   return (
-    <>
+    <div className="page-stack page-container">
       <Card
         title="内部用户"
         extra={
@@ -193,6 +193,7 @@ export default function UsersPage() {
             创建用户
           </Button>
         }
+        className="responsive-card"
       >
         <Typography.Paragraph type="secondary">
           新用户以待激活状态创建。系统只展示一次初始密码，用户首次登录并修改密码后才会激活。
@@ -204,6 +205,7 @@ export default function UsersPage() {
           columns={columns}
           loading={loading}
           pagination={{ pageSize: 20 }}
+          scroll={{ x: 860 }}
         />
       </Card>
 
@@ -278,6 +280,6 @@ export default function UsersPage() {
           初始密码：<Typography.Text code copyable>{initialCredential?.password}</Typography.Text>
         </Typography.Paragraph>
       </Modal>
-    </>
+    </div>
   );
 }

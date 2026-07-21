@@ -128,7 +128,7 @@ export default function ServersPage() {
 
   if (data?.empty_state && (!data.servers || data.servers.length === 0)) {
     return (
-      <>
+      <div className="page-stack page-container">
         <EmptyStateCard
           state={data.empty_state}
           action={canManage ? (
@@ -138,24 +138,26 @@ export default function ServersPage() {
           ) : undefined}
         />
         <ServerForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={load} />
-      </>
+      </div>
     );
   }
 
   return (
-    <Card title="MCP 服务" extra={addButton}>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        集中管理内部团队可访问的 MCP 服务。进入服务详情可查看工具、提示模板、数据资源和连接状态。
-      </Typography.Paragraph>
-      <Table
-        rowKey="name"
-        dataSource={data?.servers ?? []}
-        columns={columns}
-        loading={loading}
-        pagination={{ pageSize: 20 }}
-        scroll={{ x: 1100 }}
-      />
+    <div className="page-stack page-container">
+      <Card title="MCP 服务" extra={addButton} className="responsive-card">
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          集中管理内部团队可访问的 MCP 服务。进入服务详情可查看工具、提示模板、数据资源和连接状态。
+        </Typography.Paragraph>
+        <Table
+          rowKey="name"
+          dataSource={data?.servers ?? []}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+          scroll={{ x: 1100 }}
+        />
+      </Card>
       <ServerForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={load} />
-    </Card>
+    </div>
   );
 }
