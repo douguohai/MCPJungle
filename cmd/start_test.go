@@ -51,14 +51,6 @@ func TestStartCommandFlags(t *testing.T) {
 		}
 	})
 
-	t.Run("start command has sqlite db path flag", func(t *testing.T) {
-		if sqlitePathFlag := startServerCmd.Flags().Lookup("sqlite-db-path"); sqlitePathFlag == nil {
-			t.Fatal("Start command missing 'sqlite-db-path' flag")
-		} else if sqlitePathFlag.Usage == "" {
-			t.Error("sqlite-db-path flag should have usage description")
-		}
-	})
-
 	t.Run("start command has enterprise flag", func(t *testing.T) {
 		if enterpriseFlag := startServerCmd.Flags().Lookup("enterprise"); enterpriseFlag == nil {
 			t.Fatal("Start command missing 'enterprise' flag")
@@ -117,20 +109,20 @@ func writeTempFile(t *testing.T, content string) string {
 	return f
 }
 
-func TestGetPostgresDSN(t *testing.T) {
+func TestGetMysqlDSN(t *testing.T) {
 	baseEnv := map[string]string{
-		PostgresHostEnvVar:     "localhost",
-		PostgresPortEnvVar:     "5433",
-		PostgresUserEnvVar:     "user",
-		PostgresPasswordEnvVar: "pass",
-		PostgresDBEnvVar:       "mydb",
+		MysqlHostEnvVar:     "localhost",
+		MysqlPortEnvVar:     "3307",
+		MysqlUserEnvVar:     "user",
+		MysqlPasswordEnvVar: "pass",
+		MysqlDBEnvVar:       "mydb",
 	}
 
-	t.Run("returns false if POSTGRES_HOST is not set", func(t *testing.T) {
+	t.Run("returns false if MYSQL_HOST is not set", func(t *testing.T) {
 		withEnv(map[string]string{
-			PostgresHostEnvVar: "",
+			MysqlHostEnvVar: "",
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -145,14 +137,14 @@ func TestGetPostgresDSN(t *testing.T) {
 
 	t.Run("uses all env vars", func(t *testing.T) {
 		withEnv(baseEnv, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://user:pass@localhost:5433/mydb"
+			want := "user:pass@tcp(localhost:3307)/mydb?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
 			}
@@ -161,16 +153,16 @@ func TestGetPostgresDSN(t *testing.T) {
 
 	t.Run("uses defaults for missing optional vars", func(t *testing.T) {
 		withEnv(map[string]string{
-			PostgresHostEnvVar: "host",
+			MysqlHostEnvVar: "host",
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://postgres:@host:5432/postgres"
+			want := "root:@tcp(host:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
 			}
@@ -182,19 +174,19 @@ func TestGetPostgresDSN(t *testing.T) {
 		userFile := writeTempFile(t, "fileuser")
 		passFile := writeTempFile(t, "filepass")
 		withEnv(map[string]string{
-			PostgresHostEnvVar:               "host",
-			PostgresDBEnvVar + "_FILE":       dbFile,
-			PostgresUserEnvVar + "_FILE":     userFile,
-			PostgresPasswordEnvVar + "_FILE": passFile,
+			MysqlHostEnvVar:               "host",
+			MysqlDBEnvVar + "_FILE":       dbFile,
+			MysqlUserEnvVar + "_FILE":     userFile,
+			MysqlPasswordEnvVar + "_FILE": passFile,
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://fileuser:filepass@host:5432/filedb"
+			want := "fileuser:filepass@tcp(host:3306)/filedb?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
 			}
@@ -204,18 +196,18 @@ func TestGetPostgresDSN(t *testing.T) {
 	t.Run("env var takes precedence over _FILE", func(t *testing.T) {
 		dbFile := writeTempFile(t, "filedb")
 		withEnv(map[string]string{
-			PostgresHostEnvVar:         "host",
-			PostgresDBEnvVar:           "envdb",
-			PostgresDBEnvVar + "_FILE": dbFile,
+			MysqlHostEnvVar:         "host",
+			MysqlDBEnvVar:           "envdb",
+			MysqlDBEnvVar + "_FILE": dbFile,
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://postgres:@host:5432/envdb"
+			want := "root:@tcp(host:3306)/envdb?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
 			}
@@ -224,10 +216,10 @@ func TestGetPostgresDSN(t *testing.T) {
 
 	t.Run("returns error if _FILE cannot be read", func(t *testing.T) {
 		withEnv(map[string]string{
-			PostgresHostEnvVar:         "host",
-			PostgresDBEnvVar + "_FILE": "/nonexistent/file",
+			MysqlHostEnvVar:         "host",
+			MysqlDBEnvVar + "_FILE": "/nonexistent/file",
 		}, func() {
-			_, ok, err := getPostgresDSN()
+			_, ok, err := getMysqlDSN()
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -240,17 +232,17 @@ func TestGetPostgresDSN(t *testing.T) {
 	t.Run("trims whitespace from _FILE values", func(t *testing.T) {
 		dbFile := writeTempFile(t, "  dbwithspace \n")
 		withEnv(map[string]string{
-			PostgresHostEnvVar:         "host",
-			PostgresDBEnvVar + "_FILE": dbFile,
+			MysqlHostEnvVar:         "host",
+			MysqlDBEnvVar + "_FILE": dbFile,
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://postgres:@host:5432/dbwithspace"
+			want := "root:@tcp(host:3306)/dbwithspace?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
 			}
@@ -259,69 +251,19 @@ func TestGetPostgresDSN(t *testing.T) {
 
 	t.Run("empty password is allowed", func(t *testing.T) {
 		withEnv(map[string]string{
-			PostgresHostEnvVar: "host",
-			PostgresUserEnvVar: "user",
+			MysqlHostEnvVar: "host",
+			MysqlUserEnvVar: "user",
 		}, func() {
-			dsn, ok, err := getPostgresDSN()
+			dsn, ok, err := getMysqlDSN()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !ok {
 				t.Errorf("expected ok=true, got false")
 			}
-			want := "postgres://user:@host:5432/postgres"
+			want := "user:@tcp(host:3306)/mcpjungle?charset=utf8mb4&parseTime=True&loc=Local"
 			if dsn != want {
 				t.Errorf("expected dsn %q, got %q", want, dsn)
-			}
-		})
-	})
-}
-
-func TestGetSQLiteDBPathOverride(t *testing.T) {
-	t.Run("returns empty string when unset", func(t *testing.T) {
-		originalFlag := startServerCmdSQLiteDBPath
-		startServerCmdSQLiteDBPath = ""
-		defer func() {
-			startServerCmdSQLiteDBPath = originalFlag
-		}()
-
-		withEnv(map[string]string{
-			SQLiteDBPathEnvVar: "",
-		}, func() {
-			if got := getSQLiteDBPathOverride(); got != "" {
-				t.Fatalf("expected empty sqlite db path, got %q", got)
-			}
-		})
-	})
-
-	t.Run("uses env var when flag is unset", func(t *testing.T) {
-		originalFlag := startServerCmdSQLiteDBPath
-		startServerCmdSQLiteDBPath = ""
-		defer func() {
-			startServerCmdSQLiteDBPath = originalFlag
-		}()
-
-		withEnv(map[string]string{
-			SQLiteDBPathEnvVar: "  /tmp/.mcpjungle.db \n",
-		}, func() {
-			if got := getSQLiteDBPathOverride(); got != "/tmp/.mcpjungle.db" {
-				t.Fatalf("expected env sqlite db path, got %q", got)
-			}
-		})
-	})
-
-	t.Run("flag takes precedence over env var", func(t *testing.T) {
-		originalFlag := startServerCmdSQLiteDBPath
-		startServerCmdSQLiteDBPath = " ./custom.db "
-		defer func() {
-			startServerCmdSQLiteDBPath = originalFlag
-		}()
-
-		withEnv(map[string]string{
-			SQLiteDBPathEnvVar: "/tmp/.mcpjungle.db",
-		}, func() {
-			if got := getSQLiteDBPathOverride(); got != "./custom.db" {
-				t.Fatalf("expected flag sqlite db path, got %q", got)
 			}
 		})
 	})

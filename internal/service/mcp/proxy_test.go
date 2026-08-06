@@ -12,14 +12,14 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"gorm.io/gorm"
 )
 
 func setupTestDBForProxyAdditional(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = db.AutoMigrate(
@@ -131,6 +131,7 @@ func TestInitMCPProxyServer_LoadsEnabledEntitiesIntoCorrectProxyServers(t *testi
 	stdioServer := createTestServer(t, db)
 	sseServer, err := model.NewSSEServer("sse-server", "SSE server", "https://example.com/sse", "", types.SessionModeStateless)
 	require.NoError(t, err)
+	sseServer.Slug = slugify(sseServer.Name)
 	require.NoError(t, db.Create(sseServer).Error)
 
 	createTestToolRecord(t, db, stdioServer, "stdio-tool", true)

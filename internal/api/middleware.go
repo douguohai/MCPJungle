@@ -25,8 +25,9 @@ func (s *Server) requireInitialized() gin.HandlerFunc {
 	}
 }
 
-// requireDashboardMode returns 404 if mcpjungle server is not running in development mode.
-// It is mainly used for frontend routes, since frontend is currently only allowed in dev mode.
+// requireDashboardMode allows dashboard access in development and enterprise modes,
+// returning 404 for any other mode. It guards both the embedded frontend routes and
+// the /api/dashboard endpoints.
 func (s *Server) requireDashboardMode() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -39,7 +40,7 @@ func (s *Server) requireDashboardMode() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid server mode in context"})
 			return
 		}
-		if currentMode != model.ModeDev {
+		if currentMode != model.ModeDev && !model.IsEnterpriseMode(currentMode) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
@@ -47,8 +48,10 @@ func (s *Server) requireDashboardMode() gin.HandlerFunc {
 	}
 }
 
-// verifyUserAuthForAPIAccess is middleware that checks for a valid user token if the server is in enterprise mode.
-// this middleware doesn't care about the role of the user, it just verifies that they're authenticated.
+// verifyUserAuthForAPIAccess is middleware that authenticates a dashboard
+// request in enterprise mode via the web session (cookie or Bearer). Dev mode
+// is always allowed. This middleware does not check the user's role;
+// requireAdminUser does that.
 func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -62,29 +65,39 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 		if m == model.ModeDev {
-			// no auth is required in case of dev mode
+			// no auth is required in dev mode
 			c.Next()
 			return
 		}
 
-		authHeader := c.GetHeader("Authorization")
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing access token"})
-			return
-		}
-
-		// Verify that the token is valid and corresponds to a user
-		authenticatedUser, err := s.userService.GetUserByAccessToken(token)
+		sess, err := s.userSessionService.Lookup(sessionFromRequest(c))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token: " + err.Error()})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
 		}
-
-		// Store user in context for potential role checks in subsequent handlers
-		c.Set("user", authenticatedUser)
+		user, err := s.userService.GetUserByID(sess.UserID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		s.userSessionService.Touch(sess.ID)
+		c.Set("user", user)
 		c.Next()
 	}
+}
+
+// currentUser returns the authenticated user placed in the gin context by
+// verifyUserAuthForAPIAccess, or nil.
+func currentUser(c *gin.Context) *model.User {
+	v, ok := c.Get("user")
+	if !ok {
+		return nil
+	}
+	u, ok := v.(*model.User)
+	if !ok {
+		return nil
+	}
+	return u
 }
 
 // requireAdminUser is middleware that ensures the authenticated user has an admin role when in enterprise mode.
@@ -114,7 +127,7 @@ func (s *Server) requireAdminUser() gin.HandlerFunc {
 		}
 
 		u, ok := authenticatedUser.(*model.User)
-		if ok && u.Role == types.UserRoleAdmin {
+		if ok && u.Role == types.UserRoleSystemAdmin {
 			c.Next()
 			return
 		}
@@ -159,8 +172,11 @@ func (s *Server) requireServerMode(m model.ServerMode) gin.HandlerFunc {
 }
 
 // checkAuthForMcpProxyAccess is middleware for MCP proxy that checks for a valid MCP client token
-// if the server is in enterprise mode.
-// In development mode, mcp clients do not require auth to access the MCP proxy.
+// checkAuthForMcpProxyAccess authenticates MCP proxy requests in enterprise mode.
+// In development mode, no auth is required.
+// The middleware validates the device token and computes the user's effective
+// service set (permission groups ∩ token scope), injecting both into the
+// request context for the proxy and tool filter to consume without DB lookups.
 func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -180,25 +196,54 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 		c.Request = c.Request.WithContext(ctx)
 
 		if m == model.ModeDev {
-			// no auth is required in case of dev mode
+			// no auth is required in dev mode
 			c.Next()
 			return
 		}
 
-		authHeader := c.GetHeader("Authorization")
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing MCP client access token"})
+		rawToken := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		if rawToken == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing device token"})
 			return
 		}
-		client, err := s.mcpClientService.GetClientByToken(token)
+		deviceToken, err := s.deviceTokenService.GetByToken(rawToken)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid MCP client token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid device token"})
 			return
 		}
 
-		// inject the authenticated MCP client in context for the proxy to use
-		ctx = context.WithValue(c.Request.Context(), "client", client)
+		// Compute effective service names (permission groups ∩ token scope).
+		effectiveIDs := make(map[uint]bool)
+		if ids, err := s.permissionService.UserEffectiveServices(deviceToken.UserID); err == nil {
+			for _, id := range ids {
+				effectiveIDs[id] = true
+			}
+		}
+		if deviceToken.ScopeMode == model.DeviceTokenScopeRestricted {
+			if restrictedIDs, err := s.deviceTokenService.GetRestrictedServices(deviceToken.ID); err == nil {
+				allowed := make(map[uint]bool)
+				for _, id := range restrictedIDs {
+					if effectiveIDs[id] {
+						allowed[id] = true
+					}
+				}
+				effectiveIDs = allowed
+			}
+		}
+		effectiveNames := make(map[string]bool)
+		for id := range effectiveIDs {
+			if srv, err := s.mcpService.GetMcpServerByID(id); err == nil {
+				effectiveNames[srv.Name] = true
+			}
+		}
+
+		ctx = context.WithValue(ctx, "device_token", deviceToken)
+		ctx = context.WithValue(ctx, "effective_services", effectiveNames)
+		if deviceToken.UserID > 0 {
+			if user, err := s.userService.GetUserByID(deviceToken.UserID); err == nil {
+				ctx = context.WithValue(ctx, "user", user)
+			}
+		}
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

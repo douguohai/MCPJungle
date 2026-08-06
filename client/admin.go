@@ -11,23 +11,28 @@ import (
 )
 
 type InitServerResponse struct {
-	AdminAccessToken string `json:"admin_access_token"`
+	AdminUsername string `json:"admin_username"`
+	Message       string `json:"message"`
 }
 
-// InitServer sends a request to initialize the server in enterprise mode
-func (c *Client) InitServer() (*InitServerResponse, error) {
+// InitServer initializes the server in enterprise mode and creates the admin
+// user with the supplied credentials. The password is bcrypt-hashed server-side
+// and never returned.
+func (c *Client) InitServer(adminUsername, adminPassword string) (*InitServerResponse, error) {
 	u, _ := url.JoinPath(c.baseURL, "/init")
 
 	// TODO: Replace ModeProd with ModeEnterprise in future.
 	// For backward compatibility, the client sends ModeProd to indicate enterprise mode.
 	// This is because mcpjungle server versions < 0.2.12 do not recognize ModeEnterprise.
-	// We want to avoid breaking the client's compatibility with older server versions.
 	// Servers >= 0.2.12 will treat ModeProd as enterprise mode.
-	// In future, once we drop support for older server versions, we can switch to ModeEnterprise.
 	payload := struct {
-		Mode string `json:"mode"`
+		Mode          string `json:"mode"`
+		AdminUsername string `json:"admin_username"`
+		AdminPassword string `json:"admin_password"`
 	}{
-		Mode: string(model.ModeProd),
+		Mode:          string(model.ModeProd),
+		AdminUsername: adminUsername,
+		AdminPassword: adminPassword,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

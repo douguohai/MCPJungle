@@ -9,7 +9,7 @@ import (
 func TestGetCommandStructure(t *testing.T) {
 	t.Run("command_properties", func(t *testing.T) {
 		testhelpers.AssertEqual(t, "get", getCmd.Use)
-		testhelpers.AssertEqual(t, "Get entities like Prompts and Tool Groups", getCmd.Short)
+		testhelpers.AssertEqual(t, "Get entities like Prompts and Tool Collections", getCmd.Short)
 	})
 
 	t.Run("command_annotations", func(t *testing.T) {
@@ -21,24 +21,24 @@ func TestGetCommandStructure(t *testing.T) {
 	})
 }
 
-func TestGetGroupSubcommand(t *testing.T) {
+func TestGetCollectionSubcommand(t *testing.T) {
 	t.Run("command_properties", func(t *testing.T) {
-		testhelpers.AssertEqual(t, "group [name]", getGroupCmd.Use)
-		testhelpers.AssertEqual(t, "Get information about a specific Tool Group", getGroupCmd.Short)
-		testhelpers.AssertNotNil(t, getGroupCmd.Long)
-		testhelpers.AssertTrue(t, len(getGroupCmd.Long) > 0, "Long description should not be empty")
+		testhelpers.AssertEqual(t, "collection [name]", getCollectionCmd.Use)
+		testhelpers.AssertEqual(t, "Get information about a specific Tool Collection", getCollectionCmd.Short)
+		testhelpers.AssertNotNil(t, getCollectionCmd.Long)
+		testhelpers.AssertTrue(t, len(getCollectionCmd.Long) > 0, "Long description should not be empty")
 	})
 
 	t.Run("command_functions", func(t *testing.T) {
-		testhelpers.AssertNotNil(t, getGroupCmd.RunE)
-		testhelpers.AssertNotNil(t, getGroupCmd.Args)
+		testhelpers.AssertNotNil(t, getCollectionCmd.RunE)
+		testhelpers.AssertNotNil(t, getCollectionCmd.Args)
 	})
 
 	t.Run("long_description_content", func(t *testing.T) {
-		longDesc := getGroupCmd.Long
+		longDesc := getCollectionCmd.Long
 		expectedPhrases := []string{
-			"Get information about a specific Tool Group by name",
-			"returns the configuration of the Tool Group",
+			"Get information about a specific Tool Collection by name",
+			"returns the configuration of the Tool Collection",
 			"which tools are included",
 		}
 

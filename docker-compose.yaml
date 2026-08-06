@@ -3,18 +3,20 @@
 # The mcpjungle server runs in development mode.
 services:
   db:
-    image: postgres:17
+    image: mysql:8.0
     container_name: mcpjungle-db
     environment:
-      POSTGRES_USER: mcpjungle
-      POSTGRES_PASSWORD: mcpjungle
-      POSTGRES_DB: mcpjungle
+      MYSQL_USER: mcpjungle
+      MYSQL_PASSWORD: mcpjungle
+      MYSQL_DATABASE: mcpjungle
+      MYSQL_ROOT_PASSWORD: rootpassword
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=mcpjungle pg_isready -U mcpjungle"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +26,7 @@ services:
     image: ghcr.io/mcpjungle/mcpjungle:${MCPJUNGLE_IMAGE_TAG:-latest-stdio}
     container_name: mcpjungle-server
     environment:
-      DATABASE_URL: postgres://mcpjungle:mcpjungle@db:5432/mcpjungle
+      DATABASE_URL: mysql://mcpjungle:mcpjungle@db:3306/mcpjungle
       SERVER_MODE: ${SERVER_MODE:-development}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       MCP_SERVER_INIT_REQ_TIMEOUT_SEC: ${MCP_SERVER_INIT_REQ_TIMEOUT_SEC:-10}

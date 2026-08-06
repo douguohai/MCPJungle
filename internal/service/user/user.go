@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mcpjungle/mcpjungle/internal"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -21,16 +21,23 @@ func NewUserService(db *gorm.DB) *UserService {
 	return &UserService{db: db}
 }
 
-// CreateAdminUser creates an admin user in the MCPJungle system.
-func (u *UserService) CreateAdminUser() (*model.User, error) {
-	token, err := internal.GenerateAccessToken()
+// CreateAdminUser creates a system admin user with the given username and password.
+// The password is bcrypt-hashed before storage; the plaintext is never persisted.
+func (u *UserService) CreateAdminUser(username, password string) (*model.User, error) {
+	if password == "" {
+		return nil, fmt.Errorf("admin password must not be empty: %w", apierrors.ErrInvalidInput)
+	}
+	if username == "" {
+		username = "admin"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to hash admin password: %w", err)
 	}
 	user := model.User{
-		Username:    "admin",
-		Role:        types.UserRoleAdmin,
-		AccessToken: token,
+		Username:     username,
+		Role:         types.UserRoleSystemAdmin,
+		PasswordHash: string(hash),
 	}
 	if err := u.db.Create(&user).Error; err != nil {
 		return nil, fmt.Errorf("failed to create admin user: %w", err)
@@ -38,70 +45,71 @@ func (u *UserService) CreateAdminUser() (*model.User, error) {
 	return &user, nil
 }
 
-// GetUserByAccessToken returns a user associated with the provided access token.
-// If no user is found, an error is returned.
-func (u *UserService) GetUserByAccessToken(token string) (*model.User, error) {
+// GetUserByUsername returns the user with the given username.
+func (u *UserService) GetUserByUsername(username string) (*model.User, error) {
 	var user model.User
-	if err := u.db.Where("access_token = ?", token).First(&user).Error; err != nil {
+	if err := u.db.Where("username = ?", username).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
 		}
-		return nil, fmt.Errorf("failed to verify token: %w", err)
+		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 	return &user, nil
 }
 
-// CreateUser creates a new user with the specified username.
-// This method currently only supports creating a standard user, ie, user with the "user" role.
-func (u *UserService) CreateUser(input *model.User) (*model.User, error) {
-	user := model.User{
-		Username: input.Username,
-		Role:     types.UserRoleUser,
-	}
-	if input.AccessToken == "" {
-		// no custom access token provided, generate a new one
-		token, err := internal.GenerateAccessToken()
-		if err != nil {
-			return nil, err
-		}
-		user.AccessToken = token
-	} else {
-		// validate the user-provided custom access token
-		if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
-			return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
-		}
-		user.AccessToken = input.AccessToken
-	}
-	if err := u.db.Create(&user).Error; err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-	return &user, nil
-}
-
-// UpdateUser updates an existing user's information based on the provided input.
-// Currently it only supports updating the user's access token.
-func (u *UserService) UpdateUser(input *model.User) (*model.User, error) {
+// GetUserByID returns the user with the given primary key.
+func (u *UserService) GetUserByID(id uint) (*model.User, error) {
 	var user model.User
-	err := u.db.Where("username = ?", input.Username).First(&user).Error
-	if err != nil {
+	if err := u.db.First(&user, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user with username %s not found: %w", input.Username, apierrors.ErrNotFound)
+			return nil, fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
+	return &user, nil
+}
 
-	if input.AccessToken == "" {
-		return nil, fmt.Errorf("access token cannot be empty: %w", apierrors.ErrInvalidInput)
-	}
-	// validate the user-provided custom access token
-	if err := internal.ValidateAccessToken(input.AccessToken); err != nil {
-		return nil, fmt.Errorf("invalid access token: %v: %w", err, apierrors.ErrInvalidInput)
-	}
-	user.AccessToken = input.AccessToken
-
-	err = u.db.Save(&user).Error
+// VerifyPassword authenticates a user by username+password. It returns
+// apierrors.ErrInvalidCredentials for any mismatch (unknown user, unset
+// password, or wrong password) so callers cannot distinguish which failed.
+func (u *UserService) VerifyPassword(username, password string) (*model.User, error) {
+	user, err := u.GetUserByUsername(username)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+		}
+		return nil, err
+	}
+	if user.PasswordHash == "" {
+		// legacy/migrated user has not set a password yet
+		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, fmt.Errorf("invalid credentials: %w", apierrors.ErrInvalidCredentials)
+	}
+	return user, nil
+}
+
+// SetPasswordHash is a helper that bcrypt-hashes a plaintext password.
+func SetPasswordHash(password string) (string, error) {
+	if password == "" {
+		return "", fmt.Errorf("password must not be empty: %w", apierrors.ErrInvalidInput)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
+}
+
+// CreateUser creates a new member user with the specified username.
+func (u *UserService) CreateUser(input *model.User) (*model.User, error) {
+	user := model.User{
+		Username: input.Username,
+		Role:     types.UserRoleMember,
+	}
+	if err := u.db.Create(&user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 	return &user, nil
 }
@@ -116,7 +124,7 @@ func (u *UserService) ListUsers() ([]model.User, error) {
 }
 
 // DeleteUser removes a user with the specified username from the database.
-// If a user's role is admin, the deletion will be rejected.
+// If a user's role is system_admin, the deletion will be rejected.
 func (u *UserService) DeleteUser(username string) error {
 	var user model.User
 	err := u.db.Where("username = ?", username).First(&user).Error
@@ -127,8 +135,8 @@ func (u *UserService) DeleteUser(username string) error {
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
-	if user.Role == types.UserRoleAdmin {
-		return fmt.Errorf("cannot delete an admin user: %w", apierrors.ErrInvalidInput)
+	if user.Role == types.UserRoleSystemAdmin {
+		return fmt.Errorf("cannot delete a system admin user: %w", apierrors.ErrInvalidInput)
 	}
 
 	err = u.db.Unscoped().Where("username = ?", username).Delete(&model.User{}).Error
@@ -136,4 +144,27 @@ func (u *UserService) DeleteUser(username string) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 	return nil
+}
+
+// UserCallStatView is one row of per-user per-server call counts for the stats page.
+type UserCallStatView struct {
+	Username   string `json:"username"`
+	ServerName string `json:"server_name"`
+	Date       string `json:"date"`
+	Count      uint64 `json:"count"`
+}
+
+// ListCallStats returns per-user per-server per-day MCP call counts, joined with usernames.
+func (u *UserService) ListCallStats() ([]UserCallStatView, error) {
+	var rows []UserCallStatView
+	err := u.db.Table("user_call_stats").
+		Select("users.username AS username, user_call_stats.server_name AS server_name, user_call_stats.date AS date, user_call_stats.count AS count").
+		Joins("LEFT JOIN users ON users.id = user_call_stats.user_id").
+		Where("users.deleted_at IS NULL").
+		Order("user_call_stats.date DESC, users.username, user_call_stats.server_name").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to load call stats: %w", err)
+	}
+	return rows, nil
 }

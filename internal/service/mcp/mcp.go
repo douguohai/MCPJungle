@@ -7,9 +7,15 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"gorm.io/gorm"
 )
+
+// callEventRecorder abstracts the call-event write so tests can stub it.
+type callEventRecorder interface {
+	RecordEvent(event *model.CallEvent) error
+}
 
 // ServiceConfig holds the configuration parameters for initializing the MCPService.
 type ServiceConfig struct {
@@ -25,6 +31,10 @@ type ServiceConfig struct {
 	// SessionManager manages persistent connections for MCP servers configured in stateful mode.
 	// If nil, a default SessionManager will be created.
 	SessionManager *SessionManager
+
+	// CallEventService records detailed call events for analytics.
+	// Optional: if nil, call-event recording is disabled (backward compat).
+	CallEventService callEventRecorder
 }
 
 // MCPService coordinates operations amongst the registry database, mcp proxy server and upstream MCP servers.
@@ -52,6 +62,9 @@ type MCPService struct {
 
 	// sessionManager manages persistent connections for MCP servers configured in stateful mode.
 	sessionManager *SessionManager
+
+	// callEventService records detailed call events.  May be nil.
+	callEventService callEventRecorder
 }
 
 // NewMCPService creates a new instance of MCPService.
@@ -94,7 +107,8 @@ func NewMCPService(c *ServiceConfig) (*MCPService, error) {
 
 		mcpServerInitReqTimeoutSec: c.McpServerInitReqTimeout,
 
-		sessionManager: sessionManager,
+		sessionManager:    sessionManager,
+		callEventService:  c.CallEventService,
 	}
 	if err := s.initMCPProxyServer(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP proxy server: %w", err)

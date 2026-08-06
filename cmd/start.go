@@ -21,12 +21,16 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/db"
 	"github.com/mcpjungle/mcpjungle/internal/migrations"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
+	"github.com/mcpjungle/mcpjungle/internal/service/callevent"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
+	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/version"
 	"github.com/spf13/cobra"
@@ -37,17 +41,16 @@ const (
 	BindPortDefault = "8080"
 
 	DBUrlEnvVar            = "DATABASE_URL"
-	SQLiteDBPathEnvVar     = "SQLITE_DB_PATH"
 	ServerModeEnvVar       = "SERVER_MODE"
 	TelemetryEnabledEnvVar = "OTEL_ENABLED"
 )
 
 const (
-	PostgresHostEnvVar     = "POSTGRES_HOST"
-	PostgresPortEnvVar     = "POSTGRES_PORT"
-	PostgresUserEnvVar     = "POSTGRES_USER"
-	PostgresPasswordEnvVar = "POSTGRES_PASSWORD"
-	PostgresDBEnvVar       = "POSTGRES_DB"
+	MysqlHostEnvVar     = "MYSQL_HOST"
+	MysqlPortEnvVar     = "MYSQL_PORT"
+	MysqlUserEnvVar     = "MYSQL_USER"
+	MysqlPasswordEnvVar = "MYSQL_PASSWORD"
+	MysqlDBEnvVar       = "MYSQL_DB"
 )
 
 const (
@@ -67,7 +70,6 @@ const (
 
 var (
 	startServerCmdBindPort          string
-	startServerCmdSQLiteDBPath      string
 	startServerCmdEnterpriseEnabled bool
 	startServerCmdProdEnabled       bool
 )
@@ -78,12 +80,9 @@ var startServerCmd = &cobra.Command{
 	Long: "Starts the MCPJungle HTTP Registry and the MCP Gateway\n\n" +
 		"The server is started in development mode by default, which is ideal for running mcpjungle locally.\n" +
 		"Teams & Enterprises should run mcpjungle in enterprise mode.\n\n" +
-		"If no PostgreSQL configuration is provided, this command uses a SQLite database file at ./mcpjungle.db by default.\n" +
-		"You can optionally override that SQLite file path with the --sqlite-db-path flag or the SQLITE_DB_PATH environment variable.\n" +
-		"You can also supply a custom DSN in the DATABASE_URL environment variable.\n" +
-		"eg: export DATABASE_URL='postgres://user:password@localhost:5432/mcpjungle'\n" +
-		"For Postgres, you can also set individual connection details using the following environment variables:\n" +
-		"POSTGRES_HOST, POSTGRES_PORT (default 5432), POSTGRES_USER (default postgres), POSTGRES_PASSWORD, POSTGRES_DB (default postgres)\n\n" +
+		"MySQL 8.0 is the only supported database. Provide connection details via the DATABASE_URL environment variable,\n" +
+		"eg: export DATABASE_URL='mysql://user:password@localhost:3306/mcpjungle'\n" +
+		"or set individual variables: MYSQL_HOST, MYSQL_PORT (default 3306), MYSQL_USER (default root), MYSQL_PASSWORD, MYSQL_DB (default mcpjungle).\n\n" +
 		"You can also configure the amount of time (in seconds) mcpjungle will wait for a new MCP server's initialization before aborting it.\n" +
 		"Set the MCP_SERVER_INIT_REQ_TIMEOUT_SEC environment variable to an integer (default is 30).\n" +
 		"This is useful when you register a MCP server (usually stdio, like filesystem) that may take some time to start up.\n\n" +
@@ -103,15 +102,6 @@ func init() {
 		"port",
 		"",
 		fmt.Sprintf("port to bind the HTTP server to (overrides env var %s)", BindPortEnvVar),
-	)
-	startServerCmd.Flags().StringVar(
-		&startServerCmdSQLiteDBPath,
-		"sqlite-db-path",
-		"",
-		fmt.Sprintf(
-			"path to a custom SQLite database file to use, if not using postgres; defaults to ./mcpjungle.db (overrides env var %s)",
-			SQLiteDBPathEnvVar,
-		),
 	)
 	startServerCmd.Flags().BoolVar(
 		&startServerCmdEnterpriseEnabled,
@@ -238,15 +228,6 @@ func getBindPort() string {
 	return port
 }
 
-// getSQLiteDBPathOverride returns the configured SQLite DB path override.
-// precedence: command line flag > environment variable > unset (empty string)
-func getSQLiteDBPathOverride() string {
-	if startServerCmdSQLiteDBPath != "" {
-		return strings.TrimSpace(startServerCmdSQLiteDBPath)
-	}
-	return strings.TrimSpace(os.Getenv(SQLiteDBPathEnvVar))
-}
-
 // getEnvOrFile returns the value of the given environment variable.
 // If the environment variable is not set, it checks for a corresponding
 // _FILE environment variable and reads the value from the file if it exists.
@@ -271,45 +252,44 @@ func getEnvOrFile(envVar string) (string, error) {
 	return "", nil
 }
 
-// getPostgresDSN constructs a Postgres DSN from individual Postgres-specific environment variables & files.
-// It is used to provide an alternative way to specify Postgres connection details
-// in case the user doesn't want to use a full DATABASE_URL.
-// If POSTGRES_HOST is not set, this function assumes that Postgres-specific env vars are not being used
+// getMysqlDSN constructs a MySQL DSN from individual MySQL-specific environment variables & files.
+// It provides an alternative to DATABASE_URL for specifying MySQL connection details.
+// If MYSQL_HOST is not set, this function assumes that MySQL-specific env vars are not being used
 // and returns ok=false.
-// Other Postgres env vars are optional and have sensible defaults.
-func getPostgresDSN() (string, bool, error) {
-	host := os.Getenv(PostgresHostEnvVar)
+// Other MySQL env vars are optional and have sensible defaults.
+func getMysqlDSN() (string, bool, error) {
+	host := os.Getenv(MysqlHostEnvVar)
 	if host == "" {
 		return "", false, nil
 	}
-	port := os.Getenv(PostgresPortEnvVar)
+	port := os.Getenv(MysqlPortEnvVar)
 	if port == "" {
-		port = "5432"
+		port = "3306"
 	}
-	dbName, err := getEnvOrFile(PostgresDBEnvVar)
+	dbName, err := getEnvOrFile(MysqlDBEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres DB name: %w", err)
+		return "", false, fmt.Errorf("failed to get mysql DB name: %w", err)
 	}
 	if dbName == "" {
-		dbName = "postgres"
+		dbName = "mcpjungle"
 	}
-	pgUser, err := getEnvOrFile(PostgresUserEnvVar)
+	mysqlUser, err := getEnvOrFile(MysqlUserEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres user: %w", err)
+		return "", false, fmt.Errorf("failed to get mysql user: %w", err)
 	}
-	if pgUser == "" {
-		pgUser = "postgres"
+	if mysqlUser == "" {
+		mysqlUser = "root"
 	}
-	password, err := getEnvOrFile(PostgresPasswordEnvVar)
+	password, err := getEnvOrFile(MysqlPasswordEnvVar)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get postgres password: %w", err)
+		return "", false, fmt.Errorf("failed to get mysql password: %w", err)
 	}
 	// password can be empty, so no default value
-
-	// todo: support sslmode param in the dsn constructed here
+	// url.QueryEscape credentials so passwords containing @:/?#& don't break the
+	// go-sql-driver DSN parser.
 	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
-		url.QueryEscape(pgUser),
+		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		url.QueryEscape(mysqlUser),
 		url.QueryEscape(password),
 		host,
 		port,
@@ -399,17 +379,17 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 	dsn := os.Getenv(DBUrlEnvVar)
 
 	if dsn == "" {
-		// If DATABASE_URL isn't set, try to construct a Postgres DSN if postgres-specific env vars are set.
-		pgDSN, ok, err := getPostgresDSN()
+		// DATABASE_URL isn't set; fall back to MYSQL_* env vars if they are provided.
+		mysqlDSN, ok, err := getMysqlDSN()
 		if err != nil {
-			return fmt.Errorf("failed to get postgres DSN: %w", err)
+			return fmt.Errorf("failed to get mysql DSN: %w", err)
 		}
 		if ok {
-			dsn = pgDSN
+			dsn = mysqlDSN
 		}
 	}
 
-	dbConn, err := db.NewDBConnection(dsn, getSQLiteDBPathOverride())
+	dbConn, err := db.NewDBConnection(dsn)
 	if err != nil {
 		return err
 	}
@@ -447,6 +427,8 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		InitReqTimeoutSec: timeout,
 	})
 
+	callEventService := callevent.NewService(dbConn)
+
 	mcpServiceConfig := &mcp.ServiceConfig{
 		DB:                      dbConn,
 		McpProxyServer:          mcpProxyServer,
@@ -454,35 +436,48 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		Metrics:                 mcpMetrics,
 		McpServerInitReqTimeout: timeout,
 		SessionManager:          sessionManager,
+		CallEventService:        callEventService,
 	}
 	mcpService, err := mcp.NewMCPService(mcpServiceConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create MCP service: %v", err)
 	}
 
-	mcpClientService := mcpclient.NewMCPClientService(dbConn)
+	// Start background health check for MCP servers (design doc §9.4).
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	go mcpService.StartHealthCheck(healthCtx, mcp.DefaultHealthCheckConfig)
 
 	configService := config.NewServerConfigService(dbConn)
 	userService := user.NewUserService(dbConn)
 	dashboardService := dashboard.NewService(dbConn, otelProviders.IsEnabled())
 
-	toolGroupService, err := toolgroup.NewToolGroupService(dbConn, mcpService)
+	toolCollectionService, err := toolcollection.NewToolCollectionService(dbConn, mcpService)
 	if err != nil {
-		return fmt.Errorf("failed to create Tool Group service: %v", err)
+		return fmt.Errorf("failed to create Tool Collection service: %v", err)
 	}
+
+	userSessionService := usersession.NewService(dbConn)
+	permissionService := permission.NewService(dbConn)
+	deviceTokenService := devicetoken.NewService(dbConn)
+	auditEventService := auditevent.NewService(dbConn)
 
 	// create the API server
 	opts := &api.ServerOptions{
 		MCPProxyServer:    mcpProxyServer,
 		SseMcpProxyServer: sseMcpProxyServer,
 		MCPService:        mcpService,
-		MCPClientService:  mcpClientService,
 		ConfigService:     configService,
 		UserService:       userService,
-		ToolGroupService:  toolGroupService,
+		ToolCollectionService: toolCollectionService,
 		DashboardService:  dashboardService,
 		OtelProviders:     otelProviders,
 		Metrics:           mcpMetrics,
+		UserSessionService: userSessionService,
+		PermissionService:  permissionService,
+		DeviceTokenService: deviceTokenService,
+		CallEventService:   callEventService,
+		AuditEventService:  auditEventService,
 	}
 	s, err := api.NewServer(opts)
 	if err != nil {

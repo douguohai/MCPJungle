@@ -4,6 +4,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,12 +12,16 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
+	"github.com/mcpjungle/mcpjungle/internal/service/callevent"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
+	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/mcpjungle/mcpjungle/pkg/version"
@@ -41,14 +46,26 @@ type ServerOptions struct {
 	SseMcpProxyServer *server.MCPServer
 
 	MCPService       *mcp.MCPService
-	MCPClientService *mcpclient.McpClientService
 	ConfigService    *config.ServerConfigService
 	UserService      *user.UserService
-	ToolGroupService *toolgroup.ToolGroupService
+	ToolCollectionService *toolcollection.ToolCollectionService
 	DashboardService *dashboard.Service
 
 	OtelProviders *telemetry.Providers
 	Metrics       telemetry.CustomMetrics
+
+	// UserSessionService manages web dashboard sessions (cookie-based auth).
+	UserSessionService *usersession.Service
+
+	// PermissionService manages permission groups and user effective services.
+	PermissionService *permission.Service
+	DeviceTokenService *devicetoken.Service
+
+	// CallEventService records detailed MCP call events for analytics.
+	CallEventService *callevent.Service
+
+	// AuditEventService records administrative audit events.
+	AuditEventService *auditevent.Service
 }
 
 // Server represents the MCPJungle registry server that handles MCP proxy and API requests
@@ -59,20 +76,26 @@ type Server struct {
 	sseMcpProxyServer *server.MCPServer
 
 	mcpService       *mcp.MCPService
-	mcpClientService *mcpclient.McpClientService
 
 	configService    *config.ServerConfigService
 	userService      *user.UserService
-	toolGroupService *toolgroup.ToolGroupService
+	toolCollectionService *toolcollection.ToolCollectionService
 	dashboardService *dashboard.Service
 
 	otelProviders *telemetry.Providers
 	metrics       telemetry.CustomMetrics
 
-	// groupMcpServers keeps track of mcp-go's server.SSEServer instances created for each tool group.
-	// These instances serve the requests made to tool groups' SSE tools.
-	// We need to maintain one instance for each group for sse to work correctly.
-	groupSseServers sync.Map
+	userSessionService *usersession.Service
+	permissionService  *permission.Service
+	deviceTokenService  *devicetoken.Service
+
+	callEventService   *callevent.Service
+	auditEventService  *auditevent.Service
+
+	// collectionSseServers keeps track of mcp-go's server.SSEServer instances created for each tool collection.
+	// These instances serve the requests made to tool collections' SSE tools.
+	// We need to maintain one instance for each collection for sse to work correctly.
+	collectionSseServers sync.Map
 
 	// dashboardOAuthMu guards dashboardOAuthResults, which is a short-lived
 	// in-memory cache used by the browser-based dashboard OAuth flow.
@@ -101,13 +124,17 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		mcpProxyServer:        opts.MCPProxyServer,
 		sseMcpProxyServer:     opts.SseMcpProxyServer,
 		mcpService:            opts.MCPService,
-		mcpClientService:      opts.MCPClientService,
 		configService:         opts.ConfigService,
 		userService:           opts.UserService,
-		toolGroupService:      opts.ToolGroupService,
+		toolCollectionService: opts.ToolCollectionService,
 		dashboardService:      opts.DashboardService,
 		otelProviders:         opts.OtelProviders,
 		metrics:               opts.Metrics,
+		userSessionService:   opts.UserSessionService,
+		permissionService:   opts.PermissionService,
+		deviceTokenService:  opts.DeviceTokenService,
+		callEventService:    opts.CallEventService,
+		auditEventService:   opts.AuditEventService,
 		dashboardOAuthResults: make(map[string]dashboardOAuthSessionResult),
 	}
 
@@ -206,6 +233,33 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		r.GET("/", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
 		r.GET("/index.html", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
 		r.GET("/assets/*filepath", s.requireInitialized(), requireDashboardMode, gin.WrapH(dashboardFileServer))
+
+		// SPA fallback: serve index.html for any unknown non-API route so that
+		// client-side routes (e.g. /servers) survive a hard refresh. API and MCP
+		// paths still return a proper 404 JSON.
+		r.NoRoute(func(c *gin.Context) {
+			p := c.Request.URL.Path
+			if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/v0/") ||
+				strings.HasPrefix(p, "/mcp") || strings.HasPrefix(p, "/sse") ||
+				strings.HasPrefix(p, "/message") || strings.HasPrefix(p, "/health") ||
+				strings.HasPrefix(p, "/metrics") || strings.HasPrefix(p, "/metadata") ||
+				strings.HasPrefix(p, "/init") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			cfg, err := s.configService.GetConfig()
+			if err != nil || !cfg.Initialized {
+				c.JSON(http.StatusForbidden, gin.H{"error": "server is not initialized"})
+				return
+			}
+			if cfg.Mode != model.ModeDev && !model.IsEnterpriseMode(cfg.Mode) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			// Rewrite to "/" so the embedded file server returns index.html.
+			c.Request.URL.Path = "/"
+			dashboardFileServer.ServeHTTP(c.Writer, c.Request)
+		})
 	}
 
 	// Set up the MCP proxy server on /mcp
@@ -218,10 +272,10 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	)
 
 	r.Any(
-		V0PathPrefix+"/groups/:name/mcp",
+		V0PathPrefix+"/collections/:name/mcp",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupMCPServerCallHandler(),
+		s.toolCollectionMCPServerCallHandler(),
 	)
 
 	// Set up the SSE transport-based MCP proxy server for the global /sse endpoint
@@ -240,16 +294,16 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	)
 
 	r.Any(
-		V0PathPrefix+"/groups/:name/sse",
+		V0PathPrefix+"/collections/:name/sse",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupSseMCPServerCallHandler(),
+		s.toolCollectionSseMCPServerCallHandler(),
 	)
 	r.Any(
-		V0PathPrefix+"/groups/:name/message",
+		V0PathPrefix+"/collections/:name/message",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupSseMCPServerCallMessageHandler(),
+		s.toolCollectionSseMCPServerCallMessageHandler(),
 	)
 
 	// Setup /v0 API endpoints
@@ -278,6 +332,18 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.POST("/prompts/render", s.getPromptWithArgsHandler())
 
 		userAPI.GET("/users/whoami", requireEnterpriseMode, s.whoAmIHandler())
+
+		// Analytics: call event details, daily aggregates, and summaries.
+		// Handlers apply role-based filtering internally.
+		userAPI.GET("/analytics/events", s.listCallEventsHandler())
+		userAPI.GET("/analytics/daily", s.listDailyAggregatesHandler())
+		userAPI.GET("/analytics/summary", s.callSummaryHandler())
+	}
+
+	// Audit events: only system_admin and auditor roles (handler enforces).
+	auditAPI := apiV0.Group("/")
+	{
+		auditAPI.GET("/audit-events", s.listAuditEventsHandler())
 	}
 
 	// endpoints only accessible by an admin user in enterprise mode or anyone in development mode
@@ -288,6 +354,14 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		adminAPI.DELETE("/servers/:name", s.deregisterServerHandler())
 		adminAPI.POST("/servers/:name/enable", s.enableServerHandler())
 		adminAPI.POST("/servers/:name/disable", s.disableServerHandler())
+		adminAPI.POST("/servers/:name/validate", s.validateServerHandler())
+		adminAPI.POST("/servers/:name/publish", s.publishServerHandler())
+		adminAPI.POST("/servers/:name/archive", s.archiveServerHandler())
+
+		// Server manager CRUD
+		adminAPI.POST("/servers/:name/managers", s.addServerManagerHandler())
+		adminAPI.DELETE("/servers/:name/managers/:user_id", s.removeServerManagerHandler())
+		adminAPI.GET("/servers/:name/managers", s.listServerManagersHandler())
 
 		// this endpoint is restricted to admins only because it can potentially expose sensitive information
 		// like bearer tokens.
@@ -298,28 +372,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 		adminAPI.POST("/prompts/enable", s.enablePromptsHandler())
 		adminAPI.POST("/prompts/disable", s.disablePromptsHandler())
-
-		// endpoints for managing MCP clients (enterprise mode only)
-		adminAPI.GET(
-			"/clients",
-			requireEnterpriseMode,
-			s.listMcpClientsHandler(),
-		)
-		adminAPI.POST(
-			"/clients",
-			requireEnterpriseMode,
-			s.createMcpClientHandler(),
-		)
-		adminAPI.PUT(
-			"/clients/:name",
-			requireEnterpriseMode,
-			s.updateMcpClientHandler(),
-		)
-		adminAPI.DELETE(
-			"/clients/:name",
-			requireEnterpriseMode,
-			s.deleteMcpClientHandler(),
-		)
 
 		// endpoints for managing human users (enterprise mode only)
 		adminAPI.POST(
@@ -337,45 +389,86 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			requireEnterpriseMode,
 			s.deleteUserHandler(),
 		)
-		adminAPI.PUT(
-			"/users/:username",
-			requireEnterpriseMode,
-			s.updateUserHandler(),
-		)
 
-		// endpoints for managing tool groups
-		adminAPI.POST("/tool-groups", s.createToolGroupHandler())
-		adminAPI.GET("/tool-groups/:name", s.getToolGroupHandler())
-		adminAPI.GET("/tool-groups/:name/effective-tools", s.getToolGroupEffectiveToolsHandler())
-		adminAPI.GET("/tool-groups", s.listToolGroupsHandler())
-		adminAPI.DELETE("/tool-groups/:name", s.deleteToolGroupHandler())
-		adminAPI.PUT("/tool-groups/:name", s.updateToolGroupHandler())
+		// endpoints for managing tool collections
+		adminAPI.POST("/tool-collections", s.createToolCollectionHandler())
+		adminAPI.GET("/tool-collections/:name", s.getToolCollectionHandler())
+		adminAPI.GET("/tool-collections/:name/effective-tools", s.getToolCollectionEffectiveToolsHandler())
+		adminAPI.GET("/tool-collections", s.listToolCollectionsHandler())
+		adminAPI.DELETE("/tool-collections/:name", s.deleteToolCollectionHandler())
+		adminAPI.PUT("/tool-collections/:name", s.updateToolCollectionHandler())
 	}
 
 	if s.dashboardService != nil {
-		dashboardAPI := r.Group(
+		// Public dashboard endpoints: reachable without a user token so the login
+		// page can verify credentials before the user is authenticated.
+		dashboardPublicAPI := r.Group(
 			"/api/dashboard",
 			s.requireInitialized(),
 			requireDashboardMode,
 		)
 		{
+			dashboardPublicAPI.POST("/auth/verify", s.dashboardVerifyTokenHandler())
+			dashboardPublicAPI.POST("/auth/login", s.dashboardLoginHandler())
+			dashboardPublicAPI.POST("/auth/logout", s.dashboardLogoutHandler())
+		}
+
+		// Protected dashboard endpoints: require a valid user access token in
+		// enterprise mode (development mode is auto-allowed by the middleware).
+		dashboardAPI := r.Group(
+			"/api/dashboard",
+			s.requireInitialized(),
+			requireDashboardMode,
+			s.verifyUserAuthForAPIAccess(),
+		)
+		{
+			// Read endpoints: accessible to any authenticated dashboard user.
 			dashboardAPI.GET("/overview", s.dashboardOverviewHandler())
 			dashboardAPI.GET("/servers", s.dashboardServersHandler())
-			dashboardAPI.POST("/servers", s.dashboardRegisterServerHandler())
 			dashboardAPI.GET("/oauth/callback", s.dashboardOAuthCallbackHandler())
 			dashboardAPI.GET("/oauth/session/:id", s.dashboardOAuthSessionHandler())
-			dashboardAPI.DELETE("/servers/:name", s.dashboardDeleteServerHandler())
-			dashboardAPI.PATCH("/servers/:name/enabled", s.dashboardSetServerEnabledHandler())
 			dashboardAPI.GET("/tools", s.dashboardToolsHandler())
-			dashboardAPI.PATCH("/tools/:name/enabled", s.dashboardSetToolEnabledHandler())
-			dashboardAPI.GET("/tool-groups", s.dashboardToolGroupsHandler())
-			dashboardAPI.POST("/tool-groups", s.dashboardCreateToolGroupHandler())
-			dashboardAPI.GET("/tool-groups/:name", s.dashboardGetToolGroupHandler())
-			dashboardAPI.DELETE("/tool-groups/:name", s.dashboardDeleteToolGroupHandler())
+			dashboardAPI.GET("/tool-collections", s.dashboardToolCollectionsHandler())
+			dashboardAPI.GET("/tool-collections/:name", s.dashboardGetToolCollectionHandler())
 			dashboardAPI.GET("/prompts", s.dashboardPromptsHandler())
-			dashboardAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
 			dashboardAPI.GET("/resources", s.dashboardResourcesHandler())
 			dashboardAPI.GET("/diagnostics", s.dashboardDiagnosticsHandler())
+		}
+
+		// Mutation endpoints: restricted to admin users in enterprise mode, mirroring
+		// the requireAdminUser guard applied to the equivalent /v0 admin API routes.
+		// Without this, any authenticated user could delete servers or manage tool
+		// groups via the dashboard API while the same action is forbidden via /v0.
+		dashboardAdminAPI := dashboardAPI.Group("/", s.requireAdminUser())
+		{
+			dashboardAdminAPI.POST("/servers", s.dashboardRegisterServerHandler())
+			dashboardAdminAPI.DELETE("/servers/:name", s.dashboardDeleteServerHandler())
+			dashboardAdminAPI.PATCH("/servers/:name/enabled", s.dashboardSetServerEnabledHandler())
+			dashboardAdminAPI.PATCH("/tools/:name/enabled", s.dashboardSetToolEnabledHandler())
+			dashboardAdminAPI.POST("/tool-collections", s.dashboardCreateToolCollectionHandler())
+			dashboardAdminAPI.DELETE("/tool-collections/:name", s.dashboardDeleteToolCollectionHandler())
+			dashboardAdminAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
+
+			// Analytics: per-user per-server call counts (admin only).
+			dashboardAdminAPI.GET("/stats", s.dashboardCallStatsHandler())
+
+			// Permission groups (admin only).
+			dashboardAdminAPI.GET("/permission-groups", s.listPermissionGroupsHandler())
+			dashboardAdminAPI.POST("/permission-groups", s.createPermissionGroupHandler())
+			dashboardAdminAPI.GET("/permission-groups/:id", s.getPermissionGroupHandler())
+			dashboardAdminAPI.PATCH("/permission-groups/:id", s.updatePermissionGroupHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/disable", s.disablePermissionGroupHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/members", s.addPermissionGroupMemberHandler())
+			dashboardAdminAPI.DELETE("/permission-groups/:id/members/:user_id", s.removePermissionGroupMemberHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/services", s.addPermissionGroupServiceHandler())
+			dashboardAdminAPI.DELETE("/permission-groups/:id/services/:server_id", s.removePermissionGroupServiceHandler())
+
+			// Device tokens (admin only).
+			dashboardAdminAPI.GET("/device-tokens", s.listDeviceTokensHandler())
+			dashboardAdminAPI.POST("/device-tokens", s.createDeviceTokenHandler())
+			dashboardAdminAPI.GET("/device-tokens/:id", s.getDeviceTokenHandler())
+			dashboardAdminAPI.POST("/device-tokens/:id/revoke", s.revokeDeviceTokenHandler())
+			dashboardAdminAPI.DELETE("/device-tokens/:id", s.deleteDeviceTokenHandler())
 		}
 	}
 

@@ -13,14 +13,14 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"gorm.io/gorm"
 )
 
 func setupProxyHeaderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = db.AutoMigrate(
@@ -48,6 +48,7 @@ func createStreamableHTTPTestServer(t *testing.T, dbName, upstreamURL string) *m
 		types.SessionModeStateless,
 	)
 	require.NoError(t, err)
+	srv.Slug = slugify(srv.Name)
 
 	return srv
 }

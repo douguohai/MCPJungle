@@ -14,13 +14,13 @@ const defaultExportTargetDir = ".mcpjungle"
 
 const (
 	exportMcpServersDir = "servers"
-	exportToolGroupsDir = "groups"
+	exportToolCollectionsDir = "collections"
 )
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export configuration files of all entities",
-	Long: "This command creates configuration files for all entities (mcp servers, groups) that exist in mcpjungle.\n" +
+	Long: "This command creates configuration files for all entities (mcp servers, collections) that exist in mcpjungle.\n" +
 		"This is useful when you want to track all the entities registered in mcpjungle as code.\n" +
 		fmt.Sprintf("By default, the configurations are exported to a directory named %s in the current working directory.\n\n", defaultExportTargetDir) +
 		"NOTE: In enterprise mode, you must be an admin to export all configurations successfully.",
@@ -111,28 +111,28 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	cmd.Printf("Creating subdirectories inside %s\n\n", targetDir)
 
-	groupsDir := filepath.Join(targetDir, exportToolGroupsDir)
-	if err := os.Mkdir(groupsDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create groups directory: %w", err)
+	collectionsDir := filepath.Join(targetDir, exportToolCollectionsDir)
+	if err := os.Mkdir(collectionsDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create collections directory: %w", err)
 	}
 	serversDir := filepath.Join(targetDir, exportMcpServersDir)
 	if err := os.Mkdir(serversDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create mcp servers directory: %w", err)
 	}
 
-	cmd.Println("Fetching Tool Group configurations...")
+	cmd.Println("Fetching Tool Collection configurations...")
 
-	groups, gErr := apiClient.GetToolGroupConfigs()
+	collections, gErr := apiClient.GetToolCollectionConfigs()
 	if gErr != nil {
-		cmd.Printf("warning: failed to fetch tool group configurations: %v\n", gErr)
+		cmd.Printf("warning: failed to fetch tool collection configurations: %v\n", gErr)
 	} else {
-		if len(groups) == 0 {
-			cmd.Println("No Tool Groups found.")
+		if len(collections) == 0 {
+			cmd.Println("No Tool Collections found.")
 		} else {
-			cmd.Printf("Writing Tool Groups configurations to %s\n", groupsDir)
+			cmd.Printf("Writing Tool Collections configurations to %s\n", collectionsDir)
 
-			for _, g := range groups {
-				if err := writeJSONConfigFile(groupsDir, g.Name, g); err != nil {
+			for _, coll := range collections {
+				if err := writeJSONConfigFile(collectionsDir, coll.Name, coll); err != nil {
 					return err
 				}
 			}

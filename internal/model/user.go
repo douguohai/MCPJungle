@@ -7,12 +7,14 @@ import (
 )
 
 // User represents an authenticated, human user in enterprise mode.
-// A user can be an admin or a regular user.
 // There are no users if mcpjungle is running in development mode.
 type User struct {
 	gorm.Model
 
-	Username    string         `json:"username" gorm:"unique; not null"`
-	Role        types.UserRole `json:"role" gorm:"not null"`
-	AccessToken string         `json:"access_token" gorm:"unique; not null"`
+	Username     string         `json:"username" gorm:"uniqueIndex;not null;type:varchar(255)"`
+	Role         types.UserRole `json:"role" gorm:"not null"`
+
+	// PasswordHash stores the bcrypt hash of the user's password and is the
+	// primary credential for dashboard login (exchanged for a short-lived session).
+	PasswordHash string `json:"-" gorm:"type:varchar(255)"`
 }

@@ -18,8 +18,8 @@ var listCmd = &cobra.Command{
 }
 
 var (
-	listToolsCmdServerName string
-	listToolsCmdGroupName  string
+	listToolsCmdServerName     string
+	listToolsCmdCollectionName string
 )
 
 var (
@@ -30,12 +30,12 @@ var (
 var listToolsCmd = &cobra.Command{
 	Use:   "tools",
 	Short: "List available tools",
-	Long: "List tools available either from a specific MCP server, tool group, or across " +
+	Long: "List tools available either from a specific MCP server, tool collection, or across " +
 		"all MCP servers registered in mcpjungle.\n\n" +
-		"NOTE: When using --group flag, this command only displays tools that currently exist " +
-		"in mcpjungle and are part of the group.\n" +
-		"So if, for example, the group includes a tool that has been deleted, this command won't display it.\n" +
-		"To get the full list of tools included in a group, use the `get group` command instead.",
+		"NOTE: When using --collection flag, this command only displays tools that currently exist " +
+		"in mcpjungle and are part of the collection.\n" +
+		"So if, for example, the collection includes a tool that has been deleted, this command won't display it.\n" +
+		"To get the full list of tools included in a collection, use the `get collection` command instead.",
 	RunE: runListTools,
 }
 
@@ -59,14 +59,6 @@ var listServersCmd = &cobra.Command{
 	RunE:  runListServers,
 }
 
-var listMcpClientsCmd = &cobra.Command{
-	Use:   "mcp-clients",
-	Short: "List MCP clients (Enterprise mode)",
-	Long: "List MCP clients that are authorized to access the MCP Proxy server.\n" +
-		"This command is only available in Enterprise mode.",
-	RunE: runListMcpClients,
-}
-
 var listUsersCmd = &cobra.Command{
 	Use:   "users",
 	Short: "List users (Enterprise mode)",
@@ -74,10 +66,17 @@ var listUsersCmd = &cobra.Command{
 	RunE:  runListUsers,
 }
 
-var listGroupsCmd = &cobra.Command{
-	Use:   "groups",
-	Short: "List tool groups",
-	RunE:  runListGroups,
+var listCollectionsCmd = &cobra.Command{
+	Use:   "collections",
+	Short: "List tool collections",
+	RunE:  runListCollections,
+}
+
+var listDeviceTokensCmd = &cobra.Command{
+	Use:   "device-tokens",
+	Short: "List your device tokens (Enterprise mode)",
+	Long:  "List your device tokens. Admins see all tokens.",
+	RunE:  runListDeviceTokens,
 }
 
 func init() {
@@ -88,10 +87,10 @@ func init() {
 		"Filter tools by server name",
 	)
 	listToolsCmd.Flags().StringVar(
-		&listToolsCmdGroupName,
-		"group",
+		&listToolsCmdCollectionName,
+		"collection",
 		"",
-		"Filter tools by tool group name",
+		"Filter tools by tool collection name",
 	)
 
 	listPromptsCmd.Flags().StringVar(
@@ -112,38 +111,38 @@ func init() {
 	listCmd.AddCommand(listPromptsCmd)
 	listCmd.AddCommand(listResourcesCmd)
 	listCmd.AddCommand(listServersCmd)
-	listCmd.AddCommand(listMcpClientsCmd)
 	listCmd.AddCommand(listUsersCmd)
-	listCmd.AddCommand(listGroupsCmd)
+	listCmd.AddCommand(listCollectionsCmd)
+	listCmd.AddCommand(listDeviceTokensCmd)
 
 	rootCmd.AddCommand(listCmd)
 }
 
 func runListTools(cmd *cobra.Command, args []string) error {
-	// If both server and group flags are provided, reject the request.
-	if listToolsCmdServerName != "" && listToolsCmdGroupName != "" {
-		return fmt.Errorf("using both --server and --group flags together is currently not supported")
+	// If both server and collection flags are provided, reject the request.
+	if listToolsCmdServerName != "" && listToolsCmdCollectionName != "" {
+		return fmt.Errorf("using both --server and --collection flags together is currently not supported")
 	}
 
 	var tools []*types.Tool
 	var err error
 	var contextInfo string
 
-	if listToolsCmdGroupName != "" {
-		// Get tools from specific group
-		group, err := apiClient.GetToolGroup(listToolsCmdGroupName)
+	if listToolsCmdCollectionName != "" {
+		// Get tools from specific collection
+		collection, err := apiClient.GetToolCollection(listToolsCmdCollectionName)
 		if err != nil {
-			return fmt.Errorf("failed to get tool group '%s': %w", listToolsCmdGroupName, err)
+			return fmt.Errorf("failed to get tool collection '%s': %w", listToolsCmdCollectionName, err)
 		}
 
-		effectiveTools, err := apiClient.GetToolGroupEffectiveTools(listToolsCmdGroupName)
+		effectiveTools, err := apiClient.GetToolCollectionEffectiveTools(listToolsCmdCollectionName)
 		if err != nil {
-			return fmt.Errorf("failed to resolve effective tools for group '%s': %w", listToolsCmdGroupName, err)
+			return fmt.Errorf("failed to resolve effective tools for collection '%s': %w", listToolsCmdCollectionName, err)
 		}
 
-		// Get all tools first, then filter by group's effective tools.
-		// This is necessary because a group might contain tools that do not currently exist in mcpjungle.
-		// for eg- the tool was deleted after group creation or the group includes a non-existent tool.
+		// Get all tools first, then filter by collection's effective tools.
+		// This is necessary because a collection might contain tools that do not currently exist in mcpjungle.
+		// for eg- the tool was deleted after collection creation or the collection includes a non-existent tool.
 		// ListTools only returns tools that actually exist in mcpjungle, so we must cross-check.
 		allTools, err := apiClient.ListTools("")
 		if err != nil {
@@ -156,19 +155,19 @@ func runListTools(cmd *cobra.Command, args []string) error {
 			effectiveToolsMap[toolName] = true
 		}
 
-		// Filter tools that are in the group
+		// Filter tools that are in the collection
 		for _, tool := range allTools {
 			if effectiveToolsMap[tool.Name] {
 				tools = append(tools, tool)
 			}
 		}
 
-		contextInfo = fmt.Sprintf("Tools in group '%s'", listToolsCmdGroupName)
-		if group.Description != "" {
-			contextInfo += fmt.Sprintf(" (%s)", group.Description)
+		contextInfo = fmt.Sprintf("Tools in collection '%s'", listToolsCmdCollectionName)
+		if collection.Description != "" {
+			contextInfo += fmt.Sprintf(" (%s)", collection.Description)
 		}
 	} else {
-		// no group specified, list tools from specific server (if flag is set) or all servers
+		// no collection specified, list tools from specific server (if flag is set) or all servers
 		tools, err = apiClient.ListTools(listToolsCmdServerName)
 		if err != nil {
 			return fmt.Errorf("failed to list tools: %w", err)
@@ -180,8 +179,8 @@ func runListTools(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(tools) == 0 {
-		if listToolsCmdGroupName != "" {
-			cmd.Printf("There are no valid tools in group '%s'\n", listToolsCmdGroupName)
+		if listToolsCmdCollectionName != "" {
+			cmd.Printf("There are no valid tools in collection '%s'\n", listToolsCmdCollectionName)
 		} else if listToolsCmdServerName != "" {
 			cmd.Printf("There are no tools from mcp server '%s'\n", listToolsCmdServerName)
 		} else {
@@ -252,37 +251,6 @@ func runListServers(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runListMcpClients(cmd *cobra.Command, args []string) error {
-	clients, err := apiClient.ListMcpClients()
-	if err != nil {
-		return fmt.Errorf("failed to list MCP clients: %w", err)
-	}
-
-	if len(clients) == 0 {
-		fmt.Println("There are no MCP clients in the registry")
-		return nil
-	}
-	for i, c := range clients {
-		fmt.Printf("%d. %s\n", i+1, c.Name)
-
-		if c.Description != "" {
-			fmt.Println("Description: ", c.Description)
-		}
-
-		if len(c.AllowList) > 0 {
-			fmt.Println("Allowed servers: " + strings.Join(c.AllowList, ","))
-		} else {
-			fmt.Println("This client does not have access to any MCP servers.")
-		}
-
-		if i < len(clients)-1 {
-			fmt.Println()
-		}
-	}
-
-	return nil
-}
-
 func runListUsers(cmd *cobra.Command, args []string) error {
 	users, err := apiClient.ListUsers()
 	if err != nil {
@@ -294,8 +262,8 @@ func runListUsers(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	for i, u := range users {
-		if u.Role == string(types.UserRoleAdmin) {
-			cmd.Printf("%d. %s  [ADMIN]\n", i+1, u.Username)
+		if u.Role == string(types.UserRoleSystemAdmin) {
+			cmd.Printf("%d. %s  [SYSTEM ADMIN]\n", i+1, u.Username)
 		} else {
 			cmd.Printf("%d. %s\n", i+1, u.Username)
 		}
@@ -308,23 +276,23 @@ func runListUsers(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runListGroups(cmd *cobra.Command, args []string) error {
-	groups, err := apiClient.ListToolGroups()
+func runListCollections(cmd *cobra.Command, args []string) error {
+	collections, err := apiClient.ListToolCollections()
 	if err != nil {
-		return fmt.Errorf("failed to list tool groups: %w", err)
+		return fmt.Errorf("failed to list tool collections: %w", err)
 	}
 
-	if len(groups) == 0 {
-		cmd.Println("There are no tool groups in the registry")
+	if len(collections) == 0 {
+		cmd.Println("There are no tool collections in the registry")
 		return nil
 	}
-	for i, g := range groups {
-		cmd.Printf("%d. %s\n", i+1, g.Name)
-		if g.Description != "" {
-			cmd.Println(g.Description)
+	for i, coll := range collections {
+		cmd.Printf("%d. %s\n", i+1, coll.Name)
+		if coll.Description != "" {
+			cmd.Println(coll.Description)
 		}
 
-		if i < len(groups)-1 {
+		if i < len(collections)-1 {
 			cmd.Println()
 		}
 	}
@@ -378,5 +346,24 @@ func runListResources(cmd *cobra.Command, args []string) error {
 		cmd.Println()
 	}
 
+	return nil
+}
+
+func runListDeviceTokens(cmd *cobra.Command, args []string) error {
+	tokens, err := apiClient.ListDeviceTokens()
+	if err != nil {
+		return fmt.Errorf("failed to list device tokens: %w", err)
+	}
+	if len(tokens) == 0 {
+		cmd.Println("You have no device tokens")
+		return nil
+	}
+	for i, t := range tokens {
+		status := t.Status
+		if status == "" {
+			status = "active"
+		}
+		cmd.Printf("%d. %s  [%s] (scope: %s)\n", i+1, t.Name, status, t.ScopeMode)
+	}
 	return nil
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -15,15 +16,6 @@ var deleteCmd = &cobra.Command{
 	},
 }
 
-var deleteMcpClientCmd = &cobra.Command{
-	Use:   "mcp-client [name]",
-	Args:  cobra.ExactArgs(1),
-	Short: "Delete an MCP client (Enterprise mode)",
-	Long: "Delete an MCP client from the registry. This instantly revokes all access of this client.\n" +
-		"This command is only available in Enterprise mode.",
-	RunE: runDeleteMcpClient,
-}
-
 var deleteUserCmd = &cobra.Command{
 	Use:   "user [username]",
 	Args:  cobra.ExactArgs(1),
@@ -32,33 +24,32 @@ var deleteUserCmd = &cobra.Command{
 	RunE:  runDeleteUser,
 }
 
-var deleteToolGroupCmd = &cobra.Command{
-	Use:   "group [name]",
+var deleteToolCollectionCmd = &cobra.Command{
+	Use:   "collection [name]",
 	Args:  cobra.ExactArgs(1),
-	Short: "Delete a tool group",
-	Long: "Delete a tool group from mcpjungle.\n" +
-		"Once you delete a group, its endpoint is no longer available.\n" +
-		"So make sure no MCP clients are relying on the endpoint before you delete a group.\n" +
-		"NOTE: This command only deletes the group itself, not the tools included in it.\n" +
+	Short: "Delete a tool collection",
+	Long: "Delete a tool collection from mcpjungle.\n" +
+		"Once you delete a collection, its endpoint is no longer available.\n" +
+		"So make sure no MCP clients are relying on the endpoint before you delete a collection.\n" +
+		"NOTE: This command only deletes the collection itself, not the tools included in it.\n" +
 		"Tools are only deleted when you deregister a MCP server from mcpjungle.",
-	RunE: runDeleteToolGroup,
+	RunE: runDeleteToolCollection,
+}
+
+var deleteDeviceTokenCmd = &cobra.Command{
+	Use:   "device-token [id]",
+	Args:  cobra.ExactArgs(1),
+	Short: "Delete a device token",
+	Long:  "Permanently delete a device token by its ID. This cannot be undone.",
+	RunE:  runDeleteDeviceToken,
 }
 
 func init() {
-	deleteCmd.AddCommand(deleteMcpClientCmd)
 	deleteCmd.AddCommand(deleteUserCmd)
-	deleteCmd.AddCommand(deleteToolGroupCmd)
+	deleteCmd.AddCommand(deleteDeviceTokenCmd)
+	deleteCmd.AddCommand(deleteToolCollectionCmd)
 
 	rootCmd.AddCommand(deleteCmd)
-}
-
-func runDeleteMcpClient(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	if err := apiClient.DeleteMcpClient(name); err != nil {
-		return fmt.Errorf("failed to delete the client: %w", err)
-	}
-	fmt.Printf("MCP client '%s' deleted successfully (if it existed)!\n", name)
-	return nil
 }
 
 func runDeleteUser(cmd *cobra.Command, args []string) error {
@@ -70,11 +61,23 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runDeleteToolGroup(cmd *cobra.Command, args []string) error {
+func runDeleteToolCollection(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	if err := apiClient.DeleteToolGroup(name); err != nil {
-		return fmt.Errorf("failed to delete the tool group: %w", err)
+	if err := apiClient.DeleteToolCollection(name); err != nil {
+		return fmt.Errorf("failed to delete the tool collection: %w", err)
 	}
-	cmd.Printf("Tool group '%s' deleted successfully!\n", name)
+	cmd.Printf("Tool collection '%s' deleted successfully!\n", name)
+	return nil
+}
+
+func runDeleteDeviceToken(cmd *cobra.Command, args []string) error {
+	id, err := strconv.ParseUint(args[0], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid token id: %s", args[0])
+	}
+	if err := apiClient.DeleteDeviceToken(uint(id)); err != nil {
+		return fmt.Errorf("failed to delete device token: %w", err)
+	}
+	cmd.Println("Device token deleted successfully")
 	return nil
 }

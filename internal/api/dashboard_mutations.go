@@ -18,7 +18,7 @@ type dashboardToggleRequest struct {
 type dashboardRegisterServerResponse struct {
 	Name                  string                                    `json:"name,omitempty"`
 	Transport             string                                    `json:"transport,omitempty"`
-	Enabled               bool                                      `json:"enabled,omitempty"`
+	Status                string                                    `json:"status,omitempty"`
 	Description           string                                    `json:"description,omitempty"`
 	AuthorizationRequired *types.UpstreamOAuthAuthorizationRequired `json:"authorization_required,omitempty"`
 }
@@ -71,7 +71,7 @@ func (s *Server) dashboardRegisterServerHandler() gin.HandlerFunc {
 		c.JSON(http.StatusCreated, dashboardRegisterServerResponse{
 			Name:        server.Name,
 			Transport:   string(server.Transport),
-			Enabled:     server.Enabled,
+			Status:      server.Status,
 			Description: server.Description,
 		})
 	}
@@ -95,7 +95,7 @@ func (s *Server) dashboardSetServerEnabledHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := s.mcpService.SetDashboardServerEnabled(c.Param("name"), input.Enabled); err != nil {
+		if err := s.mcpService.SetDashboardServerStatus(c.Param("name"), input.Enabled); err != nil {
 			handleServiceError(c, err)
 			return
 		}

@@ -36,9 +36,9 @@ func TestInvokeCommandStructure(t *testing.T) {
 	testhelpers.AssertNotNil(t, inputFlag)
 	testhelpers.AssertTrue(t, len(inputFlag.Usage) > 0, "Input flag should have usage description")
 
-	groupFlag := invokeToolCmd.Flags().Lookup("group")
-	testhelpers.AssertNotNil(t, groupFlag)
-	testhelpers.AssertTrue(t, len(groupFlag.Usage) > 0, "Group flag should have usage description")
+	collectionFlag := invokeToolCmd.Flags().Lookup("collection")
+	testhelpers.AssertNotNil(t, collectionFlag)
+	testhelpers.AssertTrue(t, len(collectionFlag.Usage) > 0, "Collection flag should have usage description")
 
 	// Test long description content
 	longDesc := invokeToolCmd.Long

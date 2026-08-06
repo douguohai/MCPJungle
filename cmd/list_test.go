@@ -35,6 +35,10 @@ func TestListToolsSubcommand(t *testing.T) {
 	serverFlag := listToolsCmd.Flags().Lookup("server")
 	testhelpers.AssertNotNil(t, serverFlag)
 	testhelpers.AssertTrue(t, len(serverFlag.Usage) > 0, "Server flag should have usage description")
+
+	collectionFlag := listToolsCmd.Flags().Lookup("collection")
+	testhelpers.AssertNotNil(t, collectionFlag)
+	testhelpers.AssertTrue(t, len(collectionFlag.Usage) > 0, "Collection flag should have usage description")
 }
 
 func TestListServersSubcommand(t *testing.T) {
@@ -44,17 +48,6 @@ func TestListServersSubcommand(t *testing.T) {
 
 	// Test command functions
 	testhelpers.AssertNotNil(t, listServersCmd.RunE)
-}
-
-func TestListMcpClientsSubcommand(t *testing.T) {
-	// Test command properties
-	testhelpers.AssertEqual(t, "mcp-clients", listMcpClientsCmd.Use)
-	testhelpers.AssertEqual(t, "List MCP clients (Enterprise mode)", listMcpClientsCmd.Short)
-	testhelpers.AssertNotNil(t, listMcpClientsCmd.Long)
-	testhelpers.AssertTrue(t, len(listMcpClientsCmd.Long) > 0, "Long description should not be empty")
-
-	// Test command functions
-	testhelpers.AssertNotNil(t, listMcpClientsCmd.RunE)
 }
 
 func TestListUsersSubcommand(t *testing.T) {
@@ -68,13 +61,13 @@ func TestListUsersSubcommand(t *testing.T) {
 	testhelpers.AssertNotNil(t, listUsersCmd.RunE)
 }
 
-func TestListGroupsSubcommand(t *testing.T) {
+func TestListCollectionsSubcommand(t *testing.T) {
 	// Test command properties
-	testhelpers.AssertEqual(t, "groups", listGroupsCmd.Use)
-	testhelpers.AssertEqual(t, "List tool groups", listGroupsCmd.Short)
+	testhelpers.AssertEqual(t, "collections", listCollectionsCmd.Use)
+	testhelpers.AssertEqual(t, "List tool collections", listCollectionsCmd.Short)
 
 	// Test command functions
-	testhelpers.AssertNotNil(t, listGroupsCmd.RunE)
+	testhelpers.AssertNotNil(t, listCollectionsCmd.RunE)
 }
 
 func TestListPromptsSubcommand(t *testing.T) {
@@ -113,7 +106,7 @@ func TestListCommandIntegration(t *testing.T) {
 
 	// Test all list subcommands are properly configured
 	subcommands := listCmd.Commands()
-	expectedSubcommands := []string{"tools", "prompts", "resources", "servers", "mcp-clients", "users", "groups"}
+	expectedSubcommands := []string{"tools", "prompts", "resources", "servers", "users", "collections", "device-tokens"}
 
 	testhelpers.AssertEqual(t, len(expectedSubcommands), len(subcommands))
 

@@ -14,7 +14,7 @@ import (
 
 var (
 	invokeCmdInput     string
-	invokeCmdGroupName string
+	invokeCmdCollectionName string
 )
 
 var invokeToolCmd = &cobra.Command{
@@ -31,7 +31,7 @@ var invokeToolCmd = &cobra.Command{
 
 func init() {
 	invokeToolCmd.Flags().StringVar(&invokeCmdInput, "input", "{}", "valid JSON payload")
-	invokeToolCmd.Flags().StringVar(&invokeCmdGroupName, "group", "", "invoke the tool within a tool group's context")
+	invokeToolCmd.Flags().StringVar(&invokeCmdCollectionName, "collection", "", "invoke the tool within a tool collection's context")
 	rootCmd.AddCommand(invokeToolCmd)
 }
 
@@ -236,29 +236,29 @@ func runInvokeTool(cmd *cobra.Command, args []string) error {
 
 	toolName := args[0]
 
-	// If group is specified, validate that the tool is in the group
-	if invokeCmdGroupName != "" {
-		group, err := apiClient.GetToolGroup(invokeCmdGroupName)
+	// If collection is specified, validate that the tool is in the collection
+	if invokeCmdCollectionName != "" {
+		collection, err := apiClient.GetToolCollection(invokeCmdCollectionName)
 		if err != nil {
-			return fmt.Errorf("failed to get tool group '%s': %w", invokeCmdGroupName, err)
+			return fmt.Errorf("failed to get tool collection '%s': %w", invokeCmdCollectionName, err)
 		}
 
-		// Check if the tool is included in the group
-		toolInGroup := false
-		for _, includedTool := range group.IncludedTools {
+		// Check if the tool is included in the collection
+		toolInCollection := false
+		for _, includedTool := range collection.IncludedTools {
 			if includedTool == toolName {
-				toolInGroup = true
+				toolInCollection = true
 				break
 			}
 		}
 
-		if !toolInGroup {
-			return fmt.Errorf("tool '%s' is not available in group '%s'", toolName, invokeCmdGroupName)
+		if !toolInCollection {
+			return fmt.Errorf("tool '%s' is not available in collection '%s'", toolName, invokeCmdCollectionName)
 		}
 
-		cmd.Printf("Invoking tool '%s' from group '%s'\n", toolName, invokeCmdGroupName)
-		if group.Description != "" {
-			cmd.Printf("Group description: %s\n", group.Description)
+		cmd.Printf("Invoking tool '%s' from collection '%s'\n", toolName, invokeCmdCollectionName)
+		if collection.Description != "" {
+			cmd.Printf("Collection description: %s\n", collection.Description)
 		}
 		cmd.Println()
 	}

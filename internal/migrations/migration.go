@@ -10,35 +10,35 @@ import (
 
 // Migrate performs the database migration for the application.
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&model.McpServer{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for McpServer model: %v", err)
+	for _, m := range []interface{}{
+		&model.McpServer{},
+		&model.Tool{},
+		&model.ServerConfig{},
+		&model.User{},
+		&model.UserSession{},
+		&model.DeviceToken{},
+		&model.DeviceTokenService{},
+		&model.PermissionGroup{},
+		&model.PermissionGroupMember{},
+		&model.PermissionGroupService{},
+		&model.ToolCollection{},
+		&model.Prompt{},
+		&model.Resource{},
+		&model.UpstreamOAuthPendingSession{},
+		&model.UpstreamOAuthToken{},
+		&model.UserCallStat{},
+		&model.McpServiceManager{},
+		&model.CallEvent{},
+		&model.CallDailyAggregate{},
+		&model.AuditEvent{},
+	} {
+		if err := db.AutoMigrate(m); err != nil {
+			return fmt.Errorf("auto-migration failed for %T: %v", m, err)
+		}
 	}
-	if err := db.AutoMigrate(&model.Tool{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for Tool model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ServerConfig{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for ServerConfig model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.User{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for User model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.McpClient{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for McpClient model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ToolGroup{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for ToolGroup model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.Prompt{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for Prompt model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.Resource{}); err != nil {
-		return fmt.Errorf("auto‑migration failed for Resource model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.UpstreamOAuthPendingSession{}); err != nil {
-		return fmt.Errorf("auto-migration failed for UpstreamOAuthPendingSession model: %v", err)
-	}
-	if err := db.AutoMigrate(&model.UpstreamOAuthToken{}); err != nil {
-		return fmt.Errorf("auto-migration failed for UpstreamOAuthToken model: %v", err)
-	}
+	// AutoMigrate drops the legacy 'enabled' column from mcp_servers because
+	// the McpServer struct no longer carries it. Status is now the single
+	// source of truth for server lifecycle state.
+
 	return nil
 }

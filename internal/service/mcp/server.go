@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	mcpgotransport "github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mcpjungle/mcpjungle/internal/model"
@@ -58,19 +57,19 @@ func (m *MCPService) finalizeMcpServerRegistration(ctx context.Context, s *model
 
 // registerMcpServer performs the core MCP server registration flow.
 //
-// It first registers the MCP server in the DB, then registers all the Tools,
-// Prompts, and Resources provided by the server. Tool registration is required,
-// while prompt/resource registration is best-effort. Registered entities are
-// also added to the MCP proxy server.
+// Internally it delegates to the new lifecycle methods:
 //
-// This method assumes that any Oauth nuance is already handled and simply uses existing auth info.
+//	CreateDraftServer -> ValidateServer -> PublishServer
+//
+// This preserves backward compatibility for callers that expect a single
+// synchronous call that results in an online server with all capabilities
+// registered.
+//
+// This method assumes that any OAuth nuance is already handled and simply uses existing auth info.
 func (m *MCPService) registerMcpServer(ctx context.Context, s *model.McpServer, useStoredUpstreamAuth bool) error {
 	if err := validateServerName(s.Name); err != nil {
 		return err
 	}
-
-	// Upon registration, a server is always enabled. Admin can choose to disable it later.
-	s.Enabled = true
 
 	// Only validate URLs for transports that actually carry a URL in their config.
 	switch s.Transport {
@@ -92,38 +91,41 @@ func (m *MCPService) registerMcpServer(ctx context.Context, s *model.McpServer, 
 		}
 	}
 
-	mcpClient, err := createMcpServerConnectionWithDB(
-		ctx,
-		m.db,
-		s,
-		m.mcpServerInitReqTimeoutSec,
-		useStoredUpstreamAuth,
+	// --- Lifecycle: CreateDraft -> Validate -> Publish ---
+
+	// 1. Create draft (persists to DB with status=draft).
+	draft, err := m.CreateDraftServer(
+		s.Name,
+		s.Description,
+		s.Transport,
+		s.Config,
+		s.SessionMode,
 	)
 	if err != nil {
+		return fmt.Errorf("failed to create draft MCP server: %w", err)
+	}
+
+	// Carry over the generated ID so downstream callers can reference the
+	// server that was actually persisted.
+	s.ID = draft.ID
+	s.CreatedAt = draft.CreatedAt
+	s.UpdatedAt = draft.UpdatedAt
+	s.DeletedAt = draft.DeletedAt
+
+	// 2. Validate: connect upstream, discover capabilities, persist to DB.
+	if err := m.ValidateServer(ctx, draft.ID, useStoredUpstreamAuth); err != nil {
+		// Clean up the draft if validation fails.
+		_ = m.db.Unscoped().Delete(draft).Error
 		return err
 	}
-	defer mcpClient.Close()
 
-	// register the server in the DB
-	if err := m.db.Create(s).Error; err != nil {
-		return fmt.Errorf("failed to register mcp server: %w", err)
-	}
-
-	if err = m.registerServerTools(ctx, s, mcpClient); err != nil {
-		return fmt.Errorf("failed to register tools for MCP server %s: %w", s.Name, err)
+	// 3. Publish: set status=online, register capabilities to proxy.
+	if err := m.PublishServer(draft.ID); err != nil {
+		return fmt.Errorf("failed to publish MCP server: %w", err)
 	}
 
-	// Register prompts (best-effort, don't fail server registration)
-	if mcpClient.GetServerCapabilities().Prompts != nil {
-		if err = m.registerServerPrompts(ctx, s, mcpClient); err != nil {
-			log.Printf("[WARN] failed to register prompts for MCP server %s: %v", s.Name, err)
-		}
-	}
-	if mcpClient.GetServerCapabilities().Resources != nil {
-		if err = m.registerServerResources(ctx, s, mcpClient); err != nil {
-			log.Printf("[WARN] failed to register resources for MCP server %s: %v", s.Name, err)
-		}
-	}
+	// Keep backward compat: reflect the final state on the caller's model.
+	s.Status = model.StatusOnline
 
 	return nil
 }
@@ -196,6 +198,18 @@ func (m *MCPService) GetMcpServer(name string) (*model.McpServer, error) {
 	return &serverModel, nil
 }
 
+// GetMcpServerByID fetches a server from the database by primary key.
+func (m *MCPService) GetMcpServerByID(id uint) (*model.McpServer, error) {
+	var serverModel model.McpServer
+	if err := m.db.First(&serverModel, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("MCP server not found: %w", apierrors.ErrNotFound)
+		}
+		return nil, err
+	}
+	return &serverModel, nil
+}
+
 // EnableMcpServer enables all tools, prompts and resources registered by the given MCP server.
 // It returns the names of the enabled tools and prompts.
 // If even a single tool, prompt or resource fails to enable, the operation fails.
@@ -244,10 +258,10 @@ func (m *MCPService) DisableMcpServer(name string) ([]string, []string, error) {
 	return toolsDisabled, promptsDisabled, nil
 }
 
-// SetDashboardServerEnabled reuses the standard server enable/disable flow so dashboard
+// SetDashboardServerStatus reuses the standard server enable/disable flow so dashboard
 // toggles stay consistent with CLI semantics and cascade to the server's tools, prompts,
 // and resources.
-func (m *MCPService) SetDashboardServerEnabled(name string, enabled bool) error {
+func (m *MCPService) SetDashboardServerStatus(name string, enabled bool) error {
 	if enabled {
 		_, _, err := m.EnableMcpServer(name)
 		return err
@@ -262,12 +276,16 @@ func (m *MCPService) setMcpServerEnabled(name string, enabled bool) error {
 	if err != nil {
 		return err
 	}
-	if server.Enabled == enabled {
+	newStatus := model.StatusOnline
+	if !enabled {
+		newStatus = model.StatusDisabled
+	}
+	if server.Status == newStatus {
 		return nil
 	}
-	server.Enabled = enabled
+	server.Status = newStatus
 	if err := m.db.Save(server).Error; err != nil {
-		return fmt.Errorf("failed to set server %s enabled=%t: %w", name, enabled, err)
+		return fmt.Errorf("failed to set server %s status=%s: %w", name, newStatus, err)
 	}
 	return nil
 }

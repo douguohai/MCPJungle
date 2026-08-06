@@ -3,16 +3,23 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 
-	"github.com/mcpjungle/mcpjungle/cmd/config"
 	"github.com/spf13/cobra"
+)
+
+const (
+	InitAdminUsernameEnvVar = "MCPJUNGLE_ADMIN_USERNAME"
+	InitAdminPasswordEnvVar = "MCPJUNGLE_ADMIN_PASSWORD"
 )
 
 var initServerCmd = &cobra.Command{
 	Use:   "init-server",
 	Short: "Initialize the MCPJungle Server (for Enterprise Mode only)",
 	Long: "If the MCPJungle Server was started in Enterprise Mode, use this command to initialize the server.\n" +
-		"Initialization is required before you can use the server.\n",
+		"Initialization is required before you can use the server.\n\n" +
+		"The admin username defaults to \"admin\" (override with " + InitAdminUsernameEnvVar + ").\n" +
+		"The admin password is read from " + InitAdminPasswordEnvVar + " and is required.\n",
 	RunE: runInitServer,
 	Annotations: map[string]string{
 		"group": string(subCommandGroupAdvanced),
@@ -26,30 +33,29 @@ func init() {
 
 func runInitServer(cmd *cobra.Command, args []string) error {
 	fmt.Println("Initializing the MCPJungle Server in Enterprise Mode...")
-	resp, err := apiClient.InitServer()
+
+	username := os.Getenv(InitAdminUsernameEnvVar)
+	if username == "" {
+		username = "admin"
+	}
+	password := os.Getenv(InitAdminPasswordEnvVar)
+	if password == "" {
+		return errors.New("admin password is required: set the " + InitAdminPasswordEnvVar + " environment variable")
+	}
+
+	resp, err := apiClient.InitServer(username, password)
 	if err != nil {
 		return fmt.Errorf("failed to initialize the server: %w", err)
 	}
 
-	if resp.AdminAccessToken == "" {
-		return errors.New("server initialization failed: no admin access token received")
+	if resp.Message != "" {
+		fmt.Println(resp.Message)
 	}
-
-	// Create new client configuration
-	cfg := &config.ClientConfig{
-		RegistryURL: apiClient.BaseURL(),
-		AccessToken: resp.AdminAccessToken,
-	}
-	if err := config.Save(cfg); err != nil {
-		return fmt.Errorf("failed to create client configuration: %w", err)
-	}
-
-	cfgPath, err := config.AbsPath()
-	if err != nil {
-		return fmt.Errorf("failed to get client configuration path: %w", err)
-	}
-	fmt.Println("Your Admin access token has been saved to", cfgPath)
-
+	fmt.Printf("Admin username: %s\n", resp.AdminUsername)
+	fmt.Println()
+	fmt.Println("You can now log in with:")
+	fmt.Printf("  mcpjungle login --username %s --password $%s\n", username, InitAdminPasswordEnvVar)
+	fmt.Println()
 	fmt.Println("All done!")
 	return nil
 }

@@ -4,12 +4,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
+	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
+	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
+	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/gorm"
@@ -89,75 +95,70 @@ func TestVerifyUserAuthForAPIAccess(t *testing.T) {
 	testDB := setup.DB
 
 	userService := user.NewUserService(testDB)
+	sessionService := usersession.NewService(testDB)
+
+	// Create admin user for session-based auth tests
+	adminUser, err := userService.CreateAdminUser("admin", "test-password-123")
+	if err != nil {
+		t.Fatalf("Failed to create admin user: %v", err)
+	}
+
+	// Create a valid session for the admin user
+	rawSessionID, _, err := sessionService.Create(adminUser.ID, "", "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
 
 	tests := []struct {
 		name           string
 		mode           model.ServerMode
-		authHeader     string
-		setupUser      func() error
+		sessionToken   string
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
 			name:           "dev mode - no auth required",
 			mode:           model.ModeDev,
-			authHeader:     "",
-			setupUser:      func() error { return nil },
+			sessionToken:   "",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "",
 		},
 		{
-			name:       "enterprise mode - valid token",
-			mode:       model.ModeEnterprise,
-			authHeader: "Bearer test-token",
-			setupUser: func() error {
-				_, err := userService.CreateAdminUser()
-				if err != nil {
-					return err
-				}
-				var u model.User
-				err = testDB.Where("username = ?", "admin").First(&u).Error
-				if err != nil {
-					return err
-				}
-				u.AccessToken = "test-token"
-				return testDB.Save(&u).Error
-			},
-			expectedStatus: http.StatusOK,
-			expectedBody:   "",
-		},
-		{
-			name:           "enterprise mode - missing token",
+			name:           "enterprise mode - valid session",
 			mode:           model.ModeEnterprise,
-			authHeader:     "",
-			setupUser:      func() error { return nil },
+			sessionToken:   rawSessionID,
+			expectedStatus: http.StatusOK,
+			expectedBody:   "",
+		},
+		{
+			name:           "enterprise mode - missing session",
+			mode:           model.ModeEnterprise,
+			sessionToken:   "",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   `{"error":"missing access token"}`,
+			expectedBody:   `{"error":"invalid credentials"}`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.setupUser()
-			if err != nil {
-				t.Fatalf("Setup user failed: %v", err)
-			}
-
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
 				if tt.mode != "" {
 					c.Set("mode", tt.mode)
 				}
 			})
-			server := &Server{userService: userService}
+			server := &Server{
+				userService:        userService,
+				userSessionService: sessionService,
+			}
 			router.Use(server.verifyUserAuthForAPIAccess())
 			router.GET("/test", func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"status": "success"})
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
+			if tt.sessionToken != "" {
+				req.Header.Set("Authorization", "Bearer "+tt.sessionToken)
 			}
 			w := httptest.NewRecorder()
 
@@ -194,23 +195,23 @@ func TestRequireAdminUser(t *testing.T) {
 			expectedBody:   "",
 		},
 		{
-			name: "enterprise mode - admin user",
+			name: "enterprise mode - system admin user",
 			mode: model.ModeEnterprise,
 			user: &model.User{
 				Model:    gorm.Model{ID: 1},
 				Username: "admin",
-				Role:     types.UserRoleAdmin,
+				Role:     types.UserRoleSystemAdmin,
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   "",
 		},
 		{
-			name: "enterprise mode - regular user",
+			name: "enterprise mode - regular member user",
 			mode: model.ModeEnterprise,
 			user: &model.User{
 				Model:    gorm.Model{ID: 1},
 				Username: "user",
-				Role:     types.UserRoleUser,
+				Role:     types.UserRoleMember,
 			},
 			expectedStatus: http.StatusForbidden,
 			expectedBody:   `{"error":"user is not authorized to perform this action"}`,
@@ -345,13 +346,38 @@ func TestCheckAuthForMcpProxyAccess(t *testing.T) {
 	defer setup.Cleanup()
 	testDB := setup.DB
 
-	mcpClientService := mcpclient.NewMCPClientService(testDB)
+	dtService := devicetoken.NewService(testDB)
+	permService := permission.NewService(testDB)
+	mcpSvc, err := mcp.NewMCPService(&mcp.ServiceConfig{
+		DB:                      testDB,
+		McpProxyServer:          mcpserver.NewMCPServer("test", "0.0.1"),
+		SseMcpProxyServer:       mcpserver.NewMCPServer("test-sse", "0.0.1"),
+		Metrics:                 telemetry.NewNoopCustomMetrics(),
+		McpServerInitReqTimeout: 5,
+	})
+	if err != nil {
+		t.Fatalf("failed to create MCP service: %v", err)
+	}
+
+	// Create a test user for the device token.
+	testUser := &model.User{
+		Username: "testuser",
+		Role:     types.UserRoleMember,
+	}
+	if err := testDB.Create(testUser).Error; err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create a valid device token for the test user.
+	rawToken, _, err := dtService.Create(testUser.ID, "test-device", model.DeviceTokenScopeInheritAll, nil, 0)
+	if err != nil {
+		t.Fatalf("failed to create device token: %v", err)
+	}
 
 	tests := []struct {
 		name           string
 		mode           model.ServerMode
 		authHeader     string
-		setupClient    func() error
 		expectedStatus int
 		expectedBody   string
 	}{
@@ -359,32 +385,13 @@ func TestCheckAuthForMcpProxyAccess(t *testing.T) {
 			name:           "dev mode - no auth required",
 			mode:           model.ModeDev,
 			authHeader:     "",
-			setupClient:    func() error { return nil },
 			expectedStatus: http.StatusOK,
 			expectedBody:   "",
 		},
 		{
-			name:       "enterprise mode - valid token",
-			mode:       model.ModeEnterprise,
-			authHeader: "Bearer test-token",
-			setupClient: func() error {
-				client := model.McpClient{
-					Name:        "test-client",
-					Description: "Test client",
-					AllowList:   []byte("[]"),
-				}
-				_, err := mcpClientService.CreateClient(client)
-				if err != nil {
-					return err
-				}
-				var c model.McpClient
-				err = testDB.Where("name = ?", "test-client").First(&c).Error
-				if err != nil {
-					return err
-				}
-				c.AccessToken = "test-token"
-				return testDB.Save(&c).Error
-			},
+			name:           "enterprise mode - valid token",
+			mode:           model.ModeEnterprise,
+			authHeader:     "Bearer " + rawToken,
 			expectedStatus: http.StatusOK,
 			expectedBody:   "",
 		},
@@ -392,26 +399,32 @@ func TestCheckAuthForMcpProxyAccess(t *testing.T) {
 			name:           "enterprise mode - missing token",
 			mode:           model.ModeEnterprise,
 			authHeader:     "",
-			setupClient:    func() error { return nil },
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   `{"error":"missing MCP client access token"}`,
+			expectedBody:   `{"error":"missing device token"}`,
+		},
+		{
+			name:           "enterprise mode - invalid token",
+			mode:           model.ModeEnterprise,
+			authHeader:     "Bearer mcpdt_999_badtoken",
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   `{"error":"invalid device token"}`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.setupClient()
-			if err != nil {
-				t.Fatalf("Setup client failed: %v", err)
-			}
-
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
 				if tt.mode != "" {
 					c.Set("mode", tt.mode)
 				}
 			})
-			server := &Server{mcpClientService: mcpClientService}
+			server := &Server{
+				deviceTokenService: dtService,
+				permissionService:  permService,
+				mcpService:         mcpSvc,
+				userService:        user.NewUserService(testDB),
+			}
 			router.Use(server.checkAuthForMcpProxyAccess())
 			router.GET("/test", func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"status": "success"})
@@ -443,6 +456,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 
 	configService := config.NewServerConfigService(testDB)
 	userService := user.NewUserService(testDB)
+	sessionService := usersession.NewService(testDB)
 
 	// Setup config
 	_, err := configService.Init(model.ModeEnterprise)
@@ -450,28 +464,22 @@ func TestMiddlewareIntegration(t *testing.T) {
 		t.Fatalf("Setup config failed: %v", err)
 	}
 
-	// Setup user
-	_, err = userService.CreateAdminUser()
+	// Setup system admin user
+	adminUser, err := userService.CreateAdminUser("admin", "test-password-123")
 	if err != nil {
 		t.Fatalf("Setup user failed: %v", err)
 	}
 
-	// Update user with known token and admin role
-	var u model.User
-	err = testDB.Where("username = ?", "admin").First(&u).Error
+	// Create a valid session for the admin user
+	rawSessionID, _, err := sessionService.Create(adminUser.ID, "", "", 1*time.Hour)
 	if err != nil {
-		t.Fatalf("Failed to find admin user: %v", err)
-	}
-	u.AccessToken = "valid-token"
-	u.Role = types.UserRoleAdmin
-	err = testDB.Save(&u).Error
-	if err != nil {
-		t.Fatalf("Failed to save admin user: %v", err)
+		t.Fatalf("Failed to create session: %v", err)
 	}
 
 	server := &Server{
-		configService: configService,
-		userService:   userService,
+		configService:      configService,
+		userService:        userService,
+		userSessionService: sessionService,
 	}
 	router := gin.New()
 	router.Use(server.requireInitialized())
@@ -482,7 +490,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer "+rawSessionID)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)

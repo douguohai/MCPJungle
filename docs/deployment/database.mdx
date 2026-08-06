@@ -1,50 +1,20 @@
 ---
 title: "Configure mcpjungle's database"
-description: "Choose SQLite for local evaluation or PostgreSQL for serious deployments, and configure Mcpjungle with either a full DSN or Postgres-specific environment variables."
+description: "Connect Mcpjungle to a MySQL 8.0 database using either a full DSN or MySQL-specific environment variables."
 ---
 
-Mcpjungle requires a database to persist registered servers, tool groups, users, and related configuration.
+Mcpjungle requires a database to persist registered servers, tool groups, users, and related configuration. **MySQL 8.0 is the only supported database** — SQLite and PostgreSQL are no longer supported.
 
-Use the database choice as a deployment signal:
+You can configure the connection with either a full DSN or individual environment variables.
 
-- **SQLite** for local evaluation and single-user experimentation.
-- **PostgreSQL** for anything shared, durable, or production-facing.
+## Option 1: Connection DSN
 
-## Default: SQLite
-
-When no database configuration is provided, Mcpjungle automatically creates a SQLite file named `mcpjungle.db` in the directory where the process is started:
-
-```bash
-mcpjungle start
-# Creates ./mcpjungle.db in the current directory
-```
-
-SQLite requires no setup and works well for individuals running Mcpjungle locally. It is not recommended for production or multi-user deployments.
-
-If you do not provide PostgreSQL settings or a custom SQLite path, Mcpjungle uses `./mcpjungle.db`.
-
-You can optionally set a custom path for the SQLite file using either a command-line flag or an environment variable:
-
-```bash
-mcpjungle start --sqlite-db-path /path/to/my_custom_mcpjungle.db
-
-# or
-export SQLITE_DB_PATH=/var/lib/mcpjungle/.mcpjungle.db
-mcpjungle start
-```
-
-## PostgreSQL
-
-Mcpjungle supports PostgreSQL for serious deployments. You can configure it with either a full DSN or individual environment variables.
-
-### Option 1: Connection DSN
-
-Set the `DATABASE_URL` environment variable to a full Postgres connection string:
+Set the `DATABASE_URL` environment variable to a full MySQL connection string:
 
 <Tabs>
   <Tab title="Direct binary">
     ```bash
-    export DATABASE_URL=postgres://admin:secret@localhost:5432/mcpjungle_db
+    export DATABASE_URL=mysql://admin:secret@localhost:3306/mcpjungle
     mcpjungle start
     ```
   </Tab>
@@ -52,26 +22,26 @@ Set the `DATABASE_URL` environment variable to a full Postgres connection string
     ```bash
     docker run -d \
       --name mcpjungle-server \
-      -e DATABASE_URL=postgres://admin:secret@your-db-host:5432/mcpjungle_db \
+      -e DATABASE_URL=mysql://admin:secret@your-db-host:3306/mcpjungle \
       -p 8080:8080 \
       ghcr.io/mcpjungle/mcpjungle:latest
     ```
   </Tab>
 </Tabs>
 
-### Option 2: Individual environment variables
+## Option 2: Individual environment variables
 
-If you prefer not to construct a full DSN, set the individual Postgres variables instead. `POSTGRES_HOST` is required; all other variables are optional and have sensible defaults.
+If you prefer not to construct a full DSN, set the individual MySQL variables instead. `MYSQL_HOST` is required; all other variables are optional and have sensible defaults.
 
 ```bash
 # Required
-export POSTGRES_HOST=localhost
+export MYSQL_HOST=localhost
 
 # Optional (defaults shown)
-export POSTGRES_PORT=5432
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=secret
-export POSTGRES_DB=postgres
+export MYSQL_PORT=3306
+export MYSQL_USER=root
+export MYSQL_PASSWORD=secret
+export MYSQL_DB=mcpjungle
 
 mcpjungle start
 ```
@@ -80,17 +50,17 @@ Each credential variable also accepts a `_FILE` variant, which reads the value f
 
 | Variable | File variant | Default |
 |----------|-------------|---------|
-| `POSTGRES_USER` | `POSTGRES_USER_FILE` | `postgres` |
-| `POSTGRES_PASSWORD` | `POSTGRES_PASSWORD_FILE` | _(empty)_ |
-| `POSTGRES_DB` | `POSTGRES_DB_FILE` | `postgres` |
+| `MYSQL_USER` | `MYSQL_USER_FILE` | `root` |
+| `MYSQL_PASSWORD` | `MYSQL_PASSWORD_FILE` | _(empty)_ |
+| `MYSQL_DB` | `MYSQL_DB_FILE` | `mcpjungle` |
 
 Example using file-based secrets:
 
 ```bash
-export POSTGRES_HOST=localhost
-export POSTGRES_USER_FILE=/run/secrets/pg_user
-export POSTGRES_PASSWORD_FILE=/run/secrets/pg_password
-export POSTGRES_DB_FILE=/run/secrets/pg_db
+export MYSQL_HOST=localhost
+export MYSQL_USER_FILE=/run/secrets/mysql_user
+export MYSQL_PASSWORD_FILE=/run/secrets/mysql_password
+export MYSQL_DB_FILE=/run/secrets/mysql_db
 
 mcpjungle start
 ```
@@ -99,20 +69,28 @@ mcpjungle start
   If both a variable and its `_FILE` counterpart are set, the plain variable takes precedence.
 </Note>
 
+## Character set and time zone
+
+Mcpjungle expects MySQL to use the `utf8mb4` character set with the `utf8mb4_0900_ai_ci` collation. The Docker Compose files bundled with Mcpjungle enable these by default. If you manage your own MySQL instance, start it with:
+
+```bash
+mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+```
+
+Timestamps are written to MySQL in UTC.
+
 ## Variable precedence
 
 When Mcpjungle starts, it resolves the database connection in this order:
 
 1. `DATABASE_URL` — used as-is if set
-2. `POSTGRES_HOST` (+ optional variables) — constructs a DSN if `POSTGRES_HOST` is set
-3. `--sqlite-db-path` — uses the configured SQLite file path from the CLI flag
-4. `SQLITE_DB_PATH` — uses the configured SQLite file path from the environment variable
-5. SQLite default — creates file `mcpjungle.db` in the current directory
+2. `MYSQL_HOST` (+ optional `MYSQL_*` variables) — constructs a DSN if `MYSQL_HOST` is set
+3. If neither is set, the server refuses to start
 
 ## Production recommendations
 
 <Tip>
-  Deploy a separate Postgres cluster and supply its endpoint via `DATABASE_URL`. Running the database in a sidecar container is acceptable for development but not recommended for production.
+  Deploy a separate MySQL 8.0 instance (or a managed MySQL service) and supply its endpoint via `DATABASE_URL`. Running the database in a sidecar container is acceptable for development but not recommended for production.
 </Tip>
 
-The production Docker Compose file (`docker-compose.prod.yaml`) bundles a Postgres 17 container for convenience. For a real deployment, replace it with a managed database service and update the `DATABASE_URL` accordingly.
+The production Docker Compose file (`docker-compose.prod.yaml`) bundles a MySQL 8.0 container for convenience. For a real deployment, replace it with a managed database service and update the `DATABASE_URL` accordingly.

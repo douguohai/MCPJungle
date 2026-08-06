@@ -248,8 +248,8 @@ func TestConstructAPIEndpointWithComplexPaths(t *testing.T) {
 		},
 		{
 			name:         "path with multiple segments",
-			suffixPath:   "tool-groups/my-group/tools",
-			expectedPath: "https://api.example.com/api/v0/tool-groups/my-group/tools",
+			suffixPath:   "tool-collections/my-group/tools",
+			expectedPath: "https://api.example.com/api/v0/tool-collections/my-group/tools",
 		},
 	}
 

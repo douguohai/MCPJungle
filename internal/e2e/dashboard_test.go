@@ -26,22 +26,22 @@ func TestDashboardRootServedInDevMode(t *testing.T) {
 	require.Contains(t, body, "MCPJungle Dashboard")
 }
 
-func TestDashboardRootHiddenInEnterpriseMode(t *testing.T) {
+func TestDashboardRootServedInEnterpriseMode(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
 	resp := env.do(t, http.MethodGet, "/", nil, env.adminToken)
 	defer drain(resp)
 
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestDashboardAPIHiddenInEnterpriseMode(t *testing.T) {
+func TestDashboardAPIServedInEnterpriseMode(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
 	resp := env.do(t, http.MethodGet, "/api/dashboard/overview", nil, env.adminToken)
 	defer drain(resp)
 
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestDashboardAPIEmptyStates(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDashboardAPIValidJSON(t *testing.T) {
 		"/api/dashboard/overview",
 		"/api/dashboard/servers",
 		"/api/dashboard/tools",
-		"/api/dashboard/tool-groups",
+		"/api/dashboard/tool-collections",
 		"/api/dashboard/prompts",
 		"/api/dashboard/resources",
 		"/api/dashboard/diagnostics",
@@ -141,7 +141,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	require.Len(t, servers, 1)
 	server := servers[0].(map[string]any)
 	require.Equal(t, "dashsrv", server["name"])
-	require.Equal(t, true, server["enabled"])
+	require.Equal(t, model.StatusOnline, server["status"])
 
 	toolsResp := env.do(t, http.MethodGet, "/api/dashboard/tools", nil, "")
 	defer drain(toolsResp)
@@ -208,7 +208,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	}
 	require.NotNil(t, echoTool)
 	require.Equal(t, false, echoTool["enabled"])
-	require.Equal(t, false, echoTool["server_enabled"])
+	require.Equal(t, model.StatusDisabled, echoTool["server_status"])
 
 	promptsAfterServerDisableResp := env.do(t, http.MethodGet, "/api/dashboard/prompts", nil, "")
 	defer drain(promptsAfterServerDisableResp)
@@ -225,7 +225,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	}
 	require.NotNil(t, simplePrompt)
 	require.Equal(t, false, simplePrompt["enabled"])
-	require.Equal(t, false, simplePrompt["server_enabled"])
+	require.Equal(t, model.StatusDisabled, simplePrompt["server_status"])
 
 	toolsAfterServerDisable, err := proxyClient.ListTools(context.Background(), mcp.ListToolsRequest{})
 	require.NoError(t, err)
@@ -280,26 +280,26 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	require.Empty(t, finalServers["servers"])
 }
 
-func TestDashboardToolGroupsCRUDAndValidation(t *testing.T) {
+func TestDashboardToolCollectionsCRUDAndValidation(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	listResp := env.do(t, http.MethodGet, "/api/dashboard/tool-groups", nil, "")
+	listResp := env.do(t, http.MethodGet, "/api/dashboard/tool-collections", nil, "")
 	defer drain(listResp)
 	require.Equal(t, http.StatusOK, listResp.StatusCode)
 	var emptyPayload map[string]any
 	decodeJSON(t, listResp, &emptyPayload)
-	require.Empty(t, emptyPayload["tool_groups"])
+	require.Empty(t, emptyPayload["tool_collections"])
 	require.NotNil(t, emptyPayload["empty_state"])
 
-	invalidResp := env.do(t, http.MethodPost, "/api/dashboard/tool-groups", map[string]any{
+	invalidResp := env.do(t, http.MethodPost, "/api/dashboard/tool-collections", map[string]any{
 		"name":  "empty-group",
 		"tools": []string{},
 	}, "")
 	defer drain(invalidResp)
 	require.Equal(t, http.StatusBadRequest, invalidResp.StatusCode)
 
-	createResp := env.do(t, http.MethodPost, "/api/dashboard/tool-groups", map[string]any{
+	createResp := env.do(t, http.MethodPost, "/api/dashboard/tool-collections", map[string]any{
 		"name":        "coding",
 		"description": "Coding helpers",
 		"tools":       []string{"everything__echo", "everything__get-sum"},
@@ -312,7 +312,7 @@ func TestDashboardToolGroupsCRUDAndValidation(t *testing.T) {
 	require.Equal(t, "coding", created["name"])
 	require.Equal(t, float64(2), created["tool_count"])
 
-	getResp := env.do(t, http.MethodGet, "/api/dashboard/tool-groups/coding", nil, "")
+	getResp := env.do(t, http.MethodGet, "/api/dashboard/tool-collections/coding", nil, "")
 	defer drain(getResp)
 	require.Equal(t, http.StatusOK, getResp.StatusCode)
 	var fetched map[string]any
@@ -321,16 +321,16 @@ func TestDashboardToolGroupsCRUDAndValidation(t *testing.T) {
 	tools := fetched["tools"].([]any)
 	require.Len(t, tools, 2)
 
-	deleteResp := env.do(t, http.MethodDelete, "/api/dashboard/tool-groups/coding", nil, "")
+	deleteResp := env.do(t, http.MethodDelete, "/api/dashboard/tool-collections/coding", nil, "")
 	defer drain(deleteResp)
 	require.Equal(t, http.StatusOK, deleteResp.StatusCode)
 
-	finalListResp := env.do(t, http.MethodGet, "/api/dashboard/tool-groups", nil, "")
+	finalListResp := env.do(t, http.MethodGet, "/api/dashboard/tool-collections", nil, "")
 	defer drain(finalListResp)
 	require.Equal(t, http.StatusOK, finalListResp.StatusCode)
 	var finalPayload map[string]any
 	decodeJSON(t, finalListResp, &finalPayload)
-	require.Empty(t, finalPayload["tool_groups"])
+	require.Empty(t, finalPayload["tool_collections"])
 }
 
 func TestDashboardRegisterServerHandlesOAuth(t *testing.T) {

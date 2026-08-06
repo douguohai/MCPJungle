@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/datatypes"
@@ -40,24 +41,50 @@ type SSEConfig struct {
 	BearerToken string `json:"bearer_token,omitempty"`
 }
 
+// McpServer lifecycle status constants (design doc §9.1).
+const (
+	StatusDraft            = "draft"
+	StatusValidating       = "validating"
+	StatusValidationFailed = "validation_failed"
+	StatusPendingPublish   = "pending_publish"
+	StatusOnline           = "online"
+	StatusUnhealthy        = "unhealthy"
+	StatusDisabled         = "disabled"
+	StatusArchived         = "archived"
+)
+
 // McpServer represents a MCP server registered in mcpjungle
 type McpServer struct {
 	gorm.Model
 
-	Name      string                   `json:"name" gorm:"uniqueIndex;not null"`
+	Name      string                   `json:"name" gorm:"uniqueIndex;not null;type:varchar(255)"`
 	Transport types.McpServerTransport `json:"transport" gorm:"type:varchar(30);not null"`
-	Enabled   bool                     `json:"enabled" gorm:"default:true"`
 
 	Description string `json:"description"`
 
 	// Config describes the transport-specific configuration for the MCP server.
 	// It contains the JSON representation of either StreamableHTTPConfig or StdioConfig.
-	Config datatypes.JSON `json:"config" gorm:"type:jsonb;not null"`
+	Config datatypes.JSON `json:"config" gorm:"not null"`
 
 	// SessionMode controls how mcpjungle manages connections to this MCP server.
 	// "stateless" (default): Creates a new connection for each tool call.
 	// "stateful": Maintains a persistent connection across tool calls.
 	SessionMode types.SessionMode `json:"session_mode" gorm:"type:varchar(20);default:'stateless'"`
+
+	// Status is the lifecycle state (draft/validating/online/unhealthy/disabled/archived).
+	Status string `json:"status" gorm:"type:varchar(20);not null;default:online;index"`
+
+	// Slug is a URL-friendly unique identifier.
+	Slug string `json:"slug" gorm:"type:varchar(255);uniqueIndex"`
+
+	// Health check tracking.
+	LastValidatedAt   *time.Time `json:"last_validated_at,omitempty"`
+	LastHealthCheckAt *time.Time `json:"last_health_check_at,omitempty"`
+	HealthFailCount   int        `json:"health_fail_count" gorm:"default:0"`
+	LastErrorSummary  string     `json:"last_error_summary,omitempty"`
+
+	// ArchivedAt is set when the server is archived (soft-delete).
+	ArchivedAt *time.Time `json:"archived_at,omitempty" gorm:"index"`
 }
 
 // NewStreamableHTTPServer creates a new MCP server with streamable HTTP transport configuration.
@@ -81,7 +108,7 @@ func NewStreamableHTTPServer(name, description, url, bearerToken string, headers
 		Name:        name,
 		Description: description,
 		Transport:   types.TransportStreamableHTTP,
-		Enabled:     true,
+		Status:      StatusOnline,
 		Config:      configJSON,
 		SessionMode: sessionMode,
 	}, nil
@@ -108,7 +135,7 @@ func NewStdioServer(name, description, command string, args []string, env map[st
 		Name:        name,
 		Description: description,
 		Transport:   types.TransportStdio,
-		Enabled:     true,
+		Status:      StatusOnline,
 		Config:      datatypes.JSON(configJSON),
 		SessionMode: sessionMode,
 	}, nil
@@ -134,7 +161,7 @@ func NewSSEServer(name, description, url, bearerToken string, sessionMode types.
 		Name:        name,
 		Description: description,
 		Transport:   types.TransportSSE,
-		Enabled:     true,
+		Status:      StatusOnline,
 		Config:      configJSON,
 		SessionMode: sessionMode,
 	}, nil

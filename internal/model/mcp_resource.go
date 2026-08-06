@@ -26,10 +26,10 @@ type Resource struct {
 	MIMEType    string `json:"mime_type"`
 
 	// Annotations stores upstream MCP resource annotations.
-	Annotations datatypes.JSON `json:"annotations" gorm:"type:jsonb"`
+	Annotations datatypes.JSON `json:"annotations"`
 
 	// Meta stores upstream MCP resource metadata.
-	Meta datatypes.JSON `json:"meta" gorm:"type:jsonb"`
+	Meta datatypes.JSON `json:"meta"`
 
 	// ServerID is the ID of the MCP server that provides this resource.
 	ServerID uint      `json:"-" gorm:"not null"`

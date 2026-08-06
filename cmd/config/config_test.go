@@ -66,10 +66,8 @@ func TestSave(t *testing.T) {
 	t.Run("Save creates file with valid config", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)
@@ -115,10 +113,8 @@ func TestSave(t *testing.T) {
 	t.Run("Save overwrites existing file", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)
@@ -166,10 +162,8 @@ func TestLoad(t *testing.T) {
 	t.Run("Load returns empty config when file does not exist", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory (no config file exists)
 		os.Setenv("HOME", tempDir)
@@ -183,10 +177,8 @@ func TestLoad(t *testing.T) {
 	t.Run("Load returns config from existing file", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)
@@ -211,10 +203,8 @@ func TestLoad(t *testing.T) {
 	t.Run("Load handles invalid YAML gracefully", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)
@@ -241,10 +231,8 @@ func TestLoad(t *testing.T) {
 	t.Run("Load handles empty file gracefully", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)
@@ -272,10 +260,8 @@ func TestConfigIntegration(t *testing.T) {
 	t.Run("Save and Load round trip", func(t *testing.T) {
 		// Create a temporary directory for testing
 		tempDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			os.Setenv("HOME", originalHome)
-		}()
+		t.Setenv("HOME", tempDir)
+		t.Setenv("USERPROFILE", tempDir)
 
 		// Set HOME to temp directory
 		os.Setenv("HOME", tempDir)

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/mcpjungle/mcpjungle/pkg/util"
 	"github.com/spf13/cobra"
 )
@@ -17,89 +16,48 @@ var updateCmd = &cobra.Command{
 	},
 }
 
-var updateToolGroupCmd = &cobra.Command{
-	Use:   "group",
-	Short: "Update a tool group",
-	Long: "Update an existing Tool Group\n" +
-		"This option allows you to supply the modified configuration file of an existing Tool group.\n" +
+var updateToolCollectionCmd = &cobra.Command{
+	Use:   "collection",
+	Short: "Update a tool collection",
+	Long: "Update an existing Tool Collection\n" +
+		"This option allows you to supply the modified configuration file of an existing Tool Collection.\n" +
 		"The new configuration completely overrides the existing one.\n" +
-		"Note that you cannot update the name of a group once it is created.\n" +
-		"Updating a group does not cause any downtime for the MCP clients relying on its endpoint.\n\n" +
+		"Note that you cannot update the name of a collection once it is created.\n" +
+		"Updating a collection does not cause any downtime for the MCP clients relying on its endpoint.\n\n" +
 		"CAUTION: If you remove any tools from the configuration (by removing them from include or adding them to exclude), " +
-		"calling update will immediately remove them from the group. " +
-		"They will no longer be accessible by MCP clients using the group's MCP server.",
-	RunE: runUpdateGroup,
-}
-
-var updateMcpClientCmd = &cobra.Command{
-	Use:   "mcp-client [name]",
-	Args:  cobra.ExactArgs(1),
-	Short: "Update an MCP client",
-	Long: "Update an existing MCP client\n" +
-		"Currently, this command only supports updating the access token of the MCP client.\n" +
-		"This is useful when you use custom tokens and you want to rotate the access token of a client.",
-	RunE: runUpdateMcpClient,
-}
-
-var updateUserCmd = &cobra.Command{
-	Use:   "user [name]",
-	Short: "Update a user",
-	Long: "Update an existing user\n" +
-		"Currently, this command only supports updating the access token of the user.\n" +
-		"This is useful when you use custom tokens and you want to rotate the access token of a user.",
-	RunE: runUpdateUser,
+		"calling update will immediately remove them from the collection. " +
+		"They will no longer be accessible by MCP clients using the collection's MCP server.",
+	RunE: runUpdateCollection,
 }
 
 var (
-	updateToolGroupConfigFilePath string
-
-	updateMcpClientAccessToken string
-
-	updateUserAccessToken string
+	updateToolCollectionConfigFilePath string
 )
 
 func init() {
-	updateToolGroupCmd.Flags().StringVarP(
-		&updateToolGroupConfigFilePath,
+	updateToolCollectionCmd.Flags().StringVarP(
+		&updateToolCollectionConfigFilePath,
 		"conf",
 		"c",
 		"",
-		"Path to new JSON configuration file for the Tool Group",
+		"Path to new JSON configuration file for the Tool Collection",
 	)
-	_ = updateToolGroupCmd.MarkFlagRequired("conf")
+	_ = updateToolCollectionCmd.MarkFlagRequired("conf")
 
-	updateMcpClientCmd.Flags().StringVar(
-		&updateMcpClientAccessToken,
-		"access-token",
-		"",
-		"New access token for the MCP client",
-	)
-	_ = updateMcpClientCmd.MarkFlagRequired("access-token")
-
-	updateUserCmd.Flags().StringVar(
-		&updateUserAccessToken,
-		"access-token",
-		"",
-		"New access token for the user",
-	)
-	_ = updateUserCmd.MarkFlagRequired("access-token")
-
-	updateCmd.AddCommand(updateToolGroupCmd)
-	updateCmd.AddCommand(updateMcpClientCmd)
-	updateCmd.AddCommand(updateUserCmd)
+	updateCmd.AddCommand(updateToolCollectionCmd)
 
 	rootCmd.AddCommand(updateCmd)
 }
 
-func runUpdateGroup(cmd *cobra.Command, args []string) error {
-	updatedConf, err := readToolGroupConfig(updateToolGroupConfigFilePath)
+func runUpdateCollection(cmd *cobra.Command, args []string) error {
+	updatedConf, err := readToolCollectionConfig(updateToolCollectionConfigFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file %s: %w", updateToolGroupConfigFilePath, err)
+		return fmt.Errorf("failed to read config file %s: %w", updateToolCollectionConfigFilePath, err)
 	}
 
-	resp, err := apiClient.UpdateToolGroup(updatedConf)
+	resp, err := apiClient.UpdateToolCollection(updatedConf)
 	if err != nil {
-		return fmt.Errorf("failed to update tool group %s: %w", updatedConf.Name, err)
+		return fmt.Errorf("failed to update tool collection %s: %w", updatedConf.Name, err)
 	}
 
 	// Check if anything was actually changed
@@ -112,11 +70,11 @@ func runUpdateGroup(cmd *cobra.Command, args []string) error {
 	noChangeInExcluded := len(excludedAdded) == 0 && len(excludedRemoved) == 0
 
 	if resp.Old.Description == resp.New.Description && noChangeInTools && noChangeInServers && noChangeInExcluded {
-		cmd.Printf("No changes detected for Tool Group %s. Nothing was updated.\n", resp.Name)
+		cmd.Printf("No changes detected for Tool Collection %s. Nothing was updated.\n", resp.Name)
 		return nil
 	}
 
-	cmd.Printf("Tool Group %s updated successfully\n\n", resp.Name)
+	cmd.Printf("Tool Collection %s updated successfully\n\n", resp.Name)
 
 	if resp.Old.Description != resp.New.Description {
 		cmd.Printf("* Description updated from:\n    %s\nto:\n    %s\n\n", resp.Old.Description, resp.New.Description)
@@ -175,32 +133,5 @@ func runUpdateGroup(cmd *cobra.Command, args []string) error {
 		cmd.Println()
 	}
 
-	return nil
-}
-
-func runUpdateMcpClient(cmd *cobra.Command, args []string) error {
-	client := &types.McpClient{
-		Name:                args[0],
-		AccessToken:         updateMcpClientAccessToken,
-		IsCustomAccessToken: true,
-	}
-	if err := apiClient.UpdateMcpClient(client); err != nil {
-		return fmt.Errorf("failed to update MCP client %s: %w", client.Name, err)
-	}
-
-	cmd.Printf("MCP client %s access token updated successfully.\n", client.Name)
-	return nil
-}
-
-func runUpdateUser(cmd *cobra.Command, args []string) error {
-	user := &types.CreateOrUpdateUserRequest{
-		Username:    args[0],
-		AccessToken: updateUserAccessToken,
-	}
-	_, err := apiClient.UpdateUser(user)
-	if err != nil {
-		return fmt.Errorf("failed to update user %s: %w", user.Username, err)
-	}
-	cmd.Printf("User %s access token updated successfully.\n", user.Username)
 	return nil
 }

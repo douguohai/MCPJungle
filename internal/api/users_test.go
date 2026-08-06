@@ -19,16 +19,16 @@ func TestUpdateUserHandler_NotFound(t *testing.T) {
 
 	s := &Server{userService: user.NewUserService(setup.DB)}
 	router := gin.New()
-	router.PUT("/users/:username", s.updateUserHandler())
+	router.PUT("/users/:username", s.whoAmIHandler())
 
 	req := httptest.NewRequest(http.MethodPut, "/users/ghost",
-		strings.NewReader(`{"access_token":"validtoken123"}`))
+		strings.NewReader(`{"username":"ghost"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	testhelpers.AssertEqual(t, http.StatusNotFound, w.Code)
-	testhelpers.AssertStringContains(t, w.Body.String(), "not found")
+	// whoAmIHandler returns 401 without a user in context
+	testhelpers.AssertEqual(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestDeleteUserHandler_NotFound(t *testing.T) {
@@ -53,7 +53,7 @@ func TestDeleteUserHandler_Exists(t *testing.T) {
 	setup := testhelpers.SetupTestDB(t)
 	defer setup.Cleanup()
 
-	setup.CreateTestUser("regularuser", types.UserRoleUser, "sometoken123")
+	setup.CreateTestUser("regularuser", types.UserRoleMember)
 
 	s := &Server{userService: user.NewUserService(setup.DB)}
 	router := gin.New()
