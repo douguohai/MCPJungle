@@ -438,6 +438,11 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create MCP service: %v", err)
 	}
 
+	// Start background health check for MCP servers (design doc §9.4).
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	go mcpService.StartHealthCheck(healthCtx, mcp.DefaultHealthCheckConfig)
+
 	configService := config.NewServerConfigService(dbConn)
 	userService := user.NewUserService(dbConn)
 	dashboardService := dashboard.NewService(dbConn, otelProviders.IsEnabled())

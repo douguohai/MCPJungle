@@ -162,6 +162,7 @@ func TestDisableResourcesByPublicURI(t *testing.T) {
 		types.SessionModeStateful,
 	)
 	require.NoError(t, err)
+	srv2.Slug = slugify(srv2.Name)
 	err = db.Create(srv2).Error
 	require.NoError(t, err)
 
@@ -415,6 +416,7 @@ func TestMCPProxyResourceHandlerRoutesDuplicateUpstreamURIs(t *testing.T) {
 		types.SessionModeStateful,
 	)
 	require.NoError(t, err)
+	srv2.Slug = slugify(srv2.Name)
 	err = db.Create(srv2).Error
 	require.NoError(t, err)
 

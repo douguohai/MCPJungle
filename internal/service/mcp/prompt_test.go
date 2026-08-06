@@ -34,6 +34,7 @@ func createTestServer(t *testing.T, db *gorm.DB) *model.McpServer {
 		"",
 	)
 	require.NoError(t, err)
+	srv.Slug = slugify(srv.Name)
 
 	err = db.Create(srv).Error
 	require.NoError(t, err)

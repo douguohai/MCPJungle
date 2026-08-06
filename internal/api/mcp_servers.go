@@ -84,7 +84,7 @@ func (s *Server) registerServerHandler() gin.HandlerFunc {
 		c.JSON(http.StatusCreated, types.RegisterServerResult{Server: &types.McpServer{
 			Name:        server.Name,
 			Transport:   string(server.Transport),
-			Enabled:     server.Enabled,
+			Status:      server.Status,
 			Description: server.Description,
 			SessionMode: string(server.SessionMode),
 			URL:         input.URL,
@@ -127,7 +127,7 @@ func (s *Server) completeUpstreamOAuthSessionHandler() gin.HandlerFunc {
 		resp := &types.McpServer{
 			Name:        server.Name,
 			Transport:   string(server.Transport),
-			Enabled:     server.Enabled,
+			Status:      server.Status,
 			Description: server.Description,
 			SessionMode: string(server.SessionMode),
 		}
@@ -182,7 +182,7 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 			servers[i] = &types.McpServer{
 				Name:        record.Name,
 				Transport:   string(record.Transport),
-				Enabled:     record.Enabled,
+				Status:      record.Status,
 				Description: record.Description,
 				SessionMode: string(record.SessionMode),
 			}
@@ -404,5 +404,127 @@ func createServerModelFromInput(input *types.RegisterServerInput) (*model.McpSer
 			return nil, fmt.Errorf("error creating SSE server: %v", err)
 		}
 		return server, nil
+	}
+}
+
+// validateServerHandler triggers upstream validation of a draft or validation_failed server.
+func (s *Server) validateServerHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		if err := s.mcpService.ValidateServer(c, server.ID, false); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": model.StatusValidating})
+	}
+}
+
+// publishServerHandler transitions a pending_publish server to online.
+func (s *Server) publishServerHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		if err := s.mcpService.PublishServer(server.ID); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": model.StatusOnline})
+	}
+}
+
+// archiveServerHandler transitions a server to archived status.
+func (s *Server) archiveServerHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		if err := s.mcpService.ArchiveServer(name); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": model.StatusArchived})
+	}
+}
+
+// addServerManagerHandler assigns a user as a manager of an MCP server.
+type addManagerInput struct {
+	UserID   uint   `json:"user_id" binding:"required"`
+	RoleType string `json:"role_type" binding:"required"`
+}
+
+func (s *Server) addServerManagerHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		var input addManagerInput
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := s.mcpService.AddManager(server.ID, input.UserID, input.RoleType); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"server_id": server.ID, "user_id": input.UserID, "role_type": input.RoleType})
+	}
+}
+
+// removeServerManagerHandler removes a user as a manager of an MCP server.
+func (s *Server) removeServerManagerHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		userIDStr := c.Param("user_id")
+		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+			return
+		}
+
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		if err := s.mcpService.RemoveManager(server.ID, uint(userID)); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		c.Status(http.StatusNoContent)
+	}
+}
+
+// listServerManagersHandler returns the managers of an MCP server.
+func (s *Server) listServerManagersHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		managers, err := s.mcpService.ListManagers(server.ID)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, managers)
 	}
 }

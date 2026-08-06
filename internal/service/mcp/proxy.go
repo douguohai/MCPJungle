@@ -24,7 +24,22 @@ func (m *MCPService) authorizeProxyServerAccess(ctx context.Context, serverName 
 	if effective == nil || !effective[serverName] {
 		return fmt.Errorf("access denied: device token is not authorized to access MCP server %s", serverName)
 	}
-	return nil
+
+	// Check lifecycle status (design doc §9.4: unhealthy servers return a
+	// distinct UPSTREAM_UNAVAILABLE error, not a permission error).
+	var srv model.McpServer
+	if err := m.db.Where("name = ?", serverName).First(&srv).Error; err != nil {
+		return fmt.Errorf("MCP server %s not found", serverName)
+	}
+	switch srv.Status {
+	case model.StatusOnline:
+		return nil
+	case model.StatusUnhealthy:
+		return fmt.Errorf("MCP server %s is temporarily unavailable (health check failing): %s",
+			serverName, srv.LastErrorSummary)
+	default:
+		return fmt.Errorf("MCP server %s is %s", serverName, srv.Status)
+	}
 }
 
 // recordUserCall increments the calling user's per-server call counter. Only the
@@ -198,9 +213,26 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 }
 
 // initMCPProxyServer initializes the MCP proxy server.
-// It loads all the registered MCP tools, prompts and resources from the database into the proxy server.
+// It loads all the registered MCP tools, prompts and resources from the database
+// into the proxy server. Only servers with status=online are loaded.
 func (m *MCPService) initMCPProxyServer() error {
 	mcpServerModelsCache := make(map[string]*model.McpServer)
+
+	// isActiveServer checks whether the given server is online or unhealthy.
+	// Unhealthy servers remain in the proxy so that calls return a clear
+	// UPSTREAM_UNAVAILABLE error rather than "tool not found" (design doc §9.4).
+	isActiveServer := func(serverName string) bool {
+		if server, ok := mcpServerModelsCache[serverName]; ok {
+			return server.Status == model.StatusOnline || server.Status == model.StatusUnhealthy
+		}
+		server, err := m.GetMcpServer(serverName)
+		if err != nil {
+			return false
+		}
+		mcpServerModelsCache[serverName] = server
+		return server.Status == model.StatusOnline || server.Status == model.StatusUnhealthy
+	}
+
 	// Load Tools
 	tools, err := m.ListTools()
 	if err != nil {
@@ -213,29 +245,18 @@ func (m *MCPService) initMCPProxyServer() error {
 			continue
 		}
 
+		serverName, _, _ := splitServerToolName(tm.Name)
+		if !isActiveServer(serverName) {
+			continue
+		}
+
 		// Add tool to the MCP proxy server
 		tool, err := convertToolModelToMcpObject(&tm)
 		if err != nil {
 			return fmt.Errorf("failed to convert tool model to MCP object for tool %s: %w", tm.Name, err)
 		}
 
-		// get the tool's MCP server so we can determine the transport type
-		// use a cache to avoid querying the DB multiple times for the same server
-		// since multiple tools can belong to the same server
-		var server *model.McpServer
-		serverName, _, _ := splitServerToolName(tool.Name)
-
-		server, exists := mcpServerModelsCache[serverName]
-		if !exists {
-			server, err = m.GetMcpServer(serverName)
-			if err != nil {
-				return fmt.Errorf(
-					"init mcp proxy server: failed to get MCP server %s for tool %s from DB: %w", serverName, tool.Name, err,
-				)
-			}
-			// store the server model in cache so we don't have to query the DB again for the same server
-			mcpServerModelsCache[serverName] = server
-		}
+		server := mcpServerModelsCache[serverName]
 
 		if server.Transport == types.TransportSSE {
 			m.sseMcpProxyServer.AddTool(tool, m.MCPProxyToolCallHandler)
@@ -258,26 +279,18 @@ func (m *MCPService) initMCPProxyServer() error {
 			continue
 		}
 
+		serverName, _, _ := splitServerPromptName(pm.Name)
+		if !isActiveServer(serverName) {
+			continue
+		}
+
 		// Add prompt to the MCP proxy server
 		prompt, err := convertPromptModelToMcpObject(&pm)
 		if err != nil {
 			return fmt.Errorf("failed to convert prompt model to MCP object for prompt %s: %w", pm.Name, err)
 		}
 
-		// get the prompt's MCP server from cache so we can determine the transport type
-		var server *model.McpServer
-		serverName, _, _ := splitServerPromptName(prompt.Name)
-
-		server, exists := mcpServerModelsCache[serverName]
-		if !exists {
-			server, err = m.GetMcpServer(serverName)
-			if err != nil {
-				return fmt.Errorf(
-					"init mcp proxy server: failed to get MCP server %s for tool %s from DB: %w", serverName, prompt.Name, err,
-				)
-			}
-			mcpServerModelsCache[serverName] = server
-		}
+		server := mcpServerModelsCache[serverName]
 
 		if server.Transport == types.TransportSSE {
 			m.sseMcpProxyServer.AddPrompt(prompt, m.mcpProxyPromptHandler)
@@ -297,7 +310,9 @@ func (m *MCPService) initMCPProxyServer() error {
 			continue
 		}
 
-		// no need to use mcp servers model cache because resources come pre-loaded with server, ie, rm.Server
+		if !isActiveServer(rm.Server.Name) {
+			continue
+		}
 
 		resource, err := convertResourceModelToMcpObject(&rm)
 		if err != nil {

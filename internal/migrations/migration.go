@@ -27,10 +27,15 @@ func Migrate(db *gorm.DB) error {
 		&model.UpstreamOAuthPendingSession{},
 		&model.UpstreamOAuthToken{},
 		&model.UserCallStat{},
+		&model.McpServiceManager{},
 	} {
 		if err := db.AutoMigrate(m); err != nil {
 			return fmt.Errorf("auto-migration failed for %T: %v", m, err)
 		}
 	}
+	// AutoMigrate drops the legacy 'enabled' column from mcp_servers because
+	// the McpServer struct no longer carries it. Status is now the single
+	// source of truth for server lifecycle state.
+
 	return nil
 }

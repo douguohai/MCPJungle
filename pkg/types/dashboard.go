@@ -56,7 +56,6 @@ type DashboardServerConfigSummary struct {
 type DashboardServer struct {
 	Name               string                       `json:"name"`
 	Transport          string                       `json:"transport"`
-	Enabled            bool                         `json:"enabled"`
 	Status             DashboardServerStatus        `json:"status"`
 	ToolCount          int                          `json:"tool_count"`
 	PromptCount        int                          `json:"prompt_count"`
@@ -79,11 +78,10 @@ type DashboardTool struct {
 	Server         string         `json:"server"`
 	Description    string         `json:"description"`
 	Enabled        bool           `json:"enabled"`
-	ServerEnabled  bool           `json:"server_enabled"`
+	ServerStatus   string         `json:"server_status"`
 	InputSchema    map[string]any `json:"input_schema,omitempty"`
 	InputPreview   string         `json:"input_preview,omitempty"`
 	Transport      string         `json:"transport,omitempty"`
-	ServerStatus   string         `json:"server_status,omitempty"`
 	AnnotationKeys []string       `json:"annotation_keys,omitempty"`
 }
 
@@ -98,11 +96,10 @@ type DashboardPrompt struct {
 	Server           string           `json:"server"`
 	Description      string           `json:"description"`
 	Enabled          bool             `json:"enabled"`
-	ServerEnabled    bool             `json:"server_enabled"`
+	ServerStatus     string           `json:"server_status"`
 	Arguments        []map[string]any `json:"arguments,omitempty"`
 	ArgumentsPreview string           `json:"arguments_preview,omitempty"`
 	Transport        string           `json:"transport,omitempty"`
-	ServerStatus     string           `json:"server_status,omitempty"`
 }
 
 type DashboardPromptsResponse struct {
@@ -118,7 +115,7 @@ type DashboardResource struct {
 	MIMEType     string `json:"mime_type,omitempty"`
 	Enabled      bool   `json:"enabled"`
 	Transport    string `json:"transport,omitempty"`
-	ServerStatus string `json:"server_status,omitempty"`
+	ServerStatus string `json:"server_status"`
 }
 
 type DashboardResourcesResponse struct {

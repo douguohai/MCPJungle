@@ -145,6 +145,7 @@ func newOAuthHTTPServerModel(t *testing.T, upstreamURL string) *model.McpServer 
 		types.SessionModeStateless,
 	)
 	require.NoError(t, err)
+	srv.Slug = slugify(srv.Name)
 	return srv
 }
 

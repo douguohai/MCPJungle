@@ -91,8 +91,7 @@ func (s *Service) Servers() (*types.DashboardServersResponse, error) {
 		resp.Servers = append(resp.Servers, types.DashboardServer{
 			Name:              inv.Name,
 			Transport:         string(inv.Transport),
-			Enabled:           inv.Enabled,
-			Status:            deriveServerStatus(inv),
+			Status:            types.DashboardServerStatus(inv.Status),
 			ToolCount:         inv.ToolCount,
 			PromptCount:       inv.PromptCount,
 			ResourceCount:     inv.ResourceCount,
@@ -127,11 +126,10 @@ func (s *Service) Tools() (*types.DashboardToolsResponse, error) {
 			Server:         tool.Server.Name,
 			Description:    tool.Description,
 			Enabled:        tool.Enabled,
-			ServerEnabled:  tool.Server.Enabled,
+			ServerStatus:   tool.Server.Status,
 			InputSchema:    decodeJSONMap(tool.InputSchema),
 			InputPreview:   compactJSON(tool.InputSchema),
 			Transport:      string(tool.Server.Transport),
-			ServerStatus:   string(deriveServerStatusFromCounts(tool.Server.Transport, 1, 0, 0)),
 			AnnotationKeys: sortedKeys(decodeJSONMap(tool.Annotations)),
 		})
 	}
@@ -166,11 +164,10 @@ func (s *Service) Prompts() (*types.DashboardPromptsResponse, error) {
 			Server:           prompt.Server.Name,
 			Description:      prompt.Description,
 			Enabled:          prompt.Enabled,
-			ServerEnabled:    prompt.Server.Enabled,
+			ServerStatus:     prompt.Server.Status,
 			Arguments:        arguments,
 			ArgumentsPreview: compactJSONArray(arguments),
 			Transport:        string(prompt.Server.Transport),
-			ServerStatus:     string(deriveServerStatusFromCounts(prompt.Server.Transport, 0, 1, 0)),
 		})
 	}
 	if len(resp.Prompts) == 0 {
@@ -204,7 +201,7 @@ func (s *Service) Resources() (*types.DashboardResourcesResponse, error) {
 			MIMEType:     resource.MIMEType,
 			Enabled:      resource.Enabled,
 			Transport:    string(resource.Server.Transport),
-			ServerStatus: string(deriveServerStatusFromCounts(resource.Server.Transport, 0, 0, 1)),
+			ServerStatus: resource.Server.Status,
 		})
 	}
 	if len(resp.Resources) == 0 {
@@ -294,7 +291,7 @@ func (s *Service) loadServerInventory() ([]serverInventory, error) {
 		activeToolCount := activeToolCounts[server.ID]
 		activePromptCount := activePromptCounts[server.ID]
 		activeResourceCount := activeResourceCounts[server.ID]
-		if !server.Enabled {
+		if server.Status != model.StatusOnline {
 			activeToolCount = 0
 			activePromptCount = 0
 			activeResourceCount = 0
@@ -319,21 +316,21 @@ func (s *Service) loadEntityCounts() (int, int, int, error) {
 	var toolCount int64
 	if err := s.db.Model(&model.Tool{}).
 		Joins("JOIN mcp_servers ON mcp_servers.id = tools.server_id").
-		Where("tools.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("tools.enabled = ? AND mcp_servers.status = ?", true, model.StatusOnline).
 		Count(&toolCount).Error; err != nil {
 		return 0, 0, 0, err
 	}
 	var promptCount int64
 	if err := s.db.Model(&model.Prompt{}).
 		Joins("JOIN mcp_servers ON mcp_servers.id = prompts.server_id").
-		Where("prompts.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("prompts.enabled = ? AND mcp_servers.status = ?", true, model.StatusOnline).
 		Count(&promptCount).Error; err != nil {
 		return 0, 0, 0, err
 	}
 	var resourceCount int64
 	if err := s.db.Model(&model.Resource{}).
 		Joins("JOIN mcp_servers ON mcp_servers.id = resources.server_id").
-		Where("resources.enabled = ? AND mcp_servers.enabled = ?", true, true).
+		Where("resources.enabled = ? AND mcp_servers.status = ?", true, model.StatusOnline).
 		Count(&resourceCount).Error; err != nil {
 		return 0, 0, 0, err
 	}

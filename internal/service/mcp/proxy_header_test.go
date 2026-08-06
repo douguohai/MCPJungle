@@ -48,6 +48,7 @@ func createStreamableHTTPTestServer(t *testing.T, dbName, upstreamURL string) *m
 		types.SessionModeStateless,
 	)
 	require.NoError(t, err)
+	srv.Slug = slugify(srv.Name)
 
 	return srv
 }

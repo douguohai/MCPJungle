@@ -329,6 +329,14 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		adminAPI.DELETE("/servers/:name", s.deregisterServerHandler())
 		adminAPI.POST("/servers/:name/enable", s.enableServerHandler())
 		adminAPI.POST("/servers/:name/disable", s.disableServerHandler())
+		adminAPI.POST("/servers/:name/validate", s.validateServerHandler())
+		adminAPI.POST("/servers/:name/publish", s.publishServerHandler())
+		adminAPI.POST("/servers/:name/archive", s.archiveServerHandler())
+
+		// Server manager CRUD
+		adminAPI.POST("/servers/:name/managers", s.addServerManagerHandler())
+		adminAPI.DELETE("/servers/:name/managers/:user_id", s.removeServerManagerHandler())
+		adminAPI.GET("/servers/:name/managers", s.listServerManagersHandler())
 
 		// this endpoint is restricted to admins only because it can potentially expose sensitive information
 		// like bearer tokens.

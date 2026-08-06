@@ -141,7 +141,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	require.Len(t, servers, 1)
 	server := servers[0].(map[string]any)
 	require.Equal(t, "dashsrv", server["name"])
-	require.Equal(t, true, server["enabled"])
+	require.Equal(t, model.StatusOnline, server["status"])
 
 	toolsResp := env.do(t, http.MethodGet, "/api/dashboard/tools", nil, "")
 	defer drain(toolsResp)
@@ -208,7 +208,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	}
 	require.NotNil(t, echoTool)
 	require.Equal(t, false, echoTool["enabled"])
-	require.Equal(t, false, echoTool["server_enabled"])
+	require.Equal(t, model.StatusDisabled, echoTool["server_status"])
 
 	promptsAfterServerDisableResp := env.do(t, http.MethodGet, "/api/dashboard/prompts", nil, "")
 	defer drain(promptsAfterServerDisableResp)
@@ -225,7 +225,7 @@ func TestDashboardMutationsAndProxyExposure(t *testing.T) {
 	}
 	require.NotNil(t, simplePrompt)
 	require.Equal(t, false, simplePrompt["enabled"])
-	require.Equal(t, false, simplePrompt["server_enabled"])
+	require.Equal(t, model.StatusDisabled, simplePrompt["server_status"])
 
 	toolsAfterServerDisable, err := proxyClient.ListTools(context.Background(), mcp.ListToolsRequest{})
 	require.NoError(t, err)

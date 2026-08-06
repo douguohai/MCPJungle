@@ -228,7 +228,7 @@ func TestRegisterMcpServerWithOAuthSupport_StreamableHTTPRegistersServerAndEntit
 
 	registeredServer, err := service.GetMcpServer("catalog")
 	require.NoError(t, err)
-	assert.True(t, registeredServer.Enabled)
+	assert.True(t, registeredServer.Status == model.StatusOnline)
 
 	tool, err := service.GetTool("catalog__echo")
 	require.NoError(t, err)
@@ -316,7 +316,7 @@ func TestRegisterMcpServer_RejectsInvalidNameAndURLBeforePersistence(t *testing.
 	}
 }
 
-func TestDisableEnableMcpServer_CascadesEntitiesAndSetDashboardServerEnabled(t *testing.T) {
+func TestDisableEnableMcpServer_CascadesEntitiesAndSetDashboardServerStatus(t *testing.T) {
 	db := setupTestDBForServerLifecycle(t)
 	srv := createTestServer(t, db)
 	createTestToolRecord(t, db, srv, "echo", true)
@@ -335,7 +335,7 @@ func TestDisableEnableMcpServer_CascadesEntitiesAndSetDashboardServerEnabled(t *
 
 	updatedServer, err := service.GetMcpServer("test-server")
 	require.NoError(t, err)
-	assert.False(t, updatedServer.Enabled)
+	assert.False(t, updatedServer.Status == model.StatusOnline)
 
 	var tool model.Tool
 	require.NoError(t, db.Where("server_id = ? AND name = ?", srv.ID, "echo").First(&tool).Error)
@@ -353,12 +353,12 @@ func TestDisableEnableMcpServer_CascadesEntitiesAndSetDashboardServerEnabled(t *
 	_, ok = service.GetToolInstance("test-server__echo")
 	assert.False(t, ok)
 
-	err = service.SetDashboardServerEnabled("test-server", true)
+	err = service.SetDashboardServerStatus("test-server", true)
 	require.NoError(t, err)
 
 	updatedServer, err = service.GetMcpServer("test-server")
 	require.NoError(t, err)
-	assert.True(t, updatedServer.Enabled)
+	assert.True(t, updatedServer.Status == model.StatusOnline)
 
 	require.NoError(t, db.Where("server_id = ? AND name = ?", srv.ID, "echo").First(&tool).Error)
 	assert.True(t, tool.Enabled)
