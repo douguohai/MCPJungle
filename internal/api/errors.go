@@ -83,29 +83,3 @@ func (s *Server) recordAuditEvent(c *gin.Context, actionType, targetType, target
 		log.Printf("[audit] failed to record event %s: %v", actionType, err)
 	}
 }
-
-// recordAuditEvent is a best-effort helper that persists an audit event.
-// If the audit service is nil or the write fails, only a log message is emitted;
-// the caller's operation is never blocked.
-func (s *Server) recordAuditEvent(c *gin.Context, actionType, targetType, targetID, changeSummary string) {
-	if s.auditEventService == nil {
-		return
-	}
-	var actorID uint
-	if u := currentUser(c); u != nil {
-		actorID = u.ID
-	}
-	event := &model.AuditEvent{
-		ActorUserID:   actorID,
-		ActionType:    actionType,
-		TargetType:    targetType,
-		TargetID:      targetID,
-		OccurredAt:    time.Now().UTC(),
-		SourceIP:      c.ClientIP(),
-		Result:        "success",
-		ChangeSummary: changeSummary,
-	}
-	if err := s.auditEventService.RecordEvent(event); err != nil {
-		log.Printf("[audit] failed to record event %s: %v", actionType, err)
-	}
-}
