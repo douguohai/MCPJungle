@@ -9,11 +9,11 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
-// CreateToolGroup sends API request to create a new Tool Group.
-func (c *Client) CreateToolGroup(group *types.ToolGroup) (*types.CreateToolGroupResponse, error) {
-	u, _ := c.constructAPIEndpoint("/tool-groups")
+// CreateToolCollection sends API request to create a new Tool Collection.
+func (c *Client) CreateToolCollection(collection *types.ToolCollection) (*types.CreateToolCollectionResponse, error) {
+	u, _ := c.constructAPIEndpoint("/tool-collections")
 
-	body, err := json.Marshal(group)
+	body, err := json.Marshal(collection)
 	if err != nil {
 		return nil, err
 	}
@@ -34,16 +34,16 @@ func (c *Client) CreateToolGroup(group *types.ToolGroup) (*types.CreateToolGroup
 		return nil, c.parseErrorResponse(resp)
 	}
 
-	var createResp types.CreateToolGroupResponse
+	var createResp types.CreateToolCollectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &createResp, nil
 }
 
-// DeleteToolGroup sends API request to delete a Tool Group by name.
-func (c *Client) DeleteToolGroup(name string) error {
-	u, _ := c.constructAPIEndpoint("/tool-groups/" + name)
+// DeleteToolCollection sends API request to delete a Tool Collection by name.
+func (c *Client) DeleteToolCollection(name string) error {
+	u, _ := c.constructAPIEndpoint("/tool-collections/" + name)
 
 	req, err := c.newRequest(http.MethodDelete, u, nil)
 	if err != nil {
@@ -63,9 +63,9 @@ func (c *Client) DeleteToolGroup(name string) error {
 	return nil
 }
 
-// ListToolGroups sends API request to list all Tool Groups.
-func (c *Client) ListToolGroups() ([]types.ToolGroup, error) {
-	u, _ := c.constructAPIEndpoint("/tool-groups")
+// ListToolCollections sends API request to list all Tool Collections.
+func (c *Client) ListToolCollections() ([]types.ToolCollection, error) {
+	u, _ := c.constructAPIEndpoint("/tool-collections")
 
 	req, err := c.newRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -82,16 +82,16 @@ func (c *Client) ListToolGroups() ([]types.ToolGroup, error) {
 		return nil, c.parseErrorResponse(resp)
 	}
 
-	var groups []types.ToolGroup
-	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+	var collections []types.ToolCollection
+	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-	return groups, nil
+	return collections, nil
 }
 
-// GetToolGroup sends API request to get details of a specific Tool Group by name.
-func (c *Client) GetToolGroup(name string) (*types.GetToolGroupResponse, error) {
-	u, _ := c.constructAPIEndpoint("/tool-groups/" + name)
+// GetToolCollection sends API request to get details of a specific Tool Collection by name.
+func (c *Client) GetToolCollection(name string) (*types.GetToolCollectionResponse, error) {
+	u, _ := c.constructAPIEndpoint("/tool-collections/" + name)
 
 	req, err := c.newRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -108,16 +108,16 @@ func (c *Client) GetToolGroup(name string) (*types.GetToolGroupResponse, error) 
 		return nil, c.parseErrorResponse(resp)
 	}
 
-	var group types.GetToolGroupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
+	var collection types.GetToolCollectionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&collection); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-	return &group, nil
+	return &collection, nil
 }
 
-// GetToolGroupEffectiveTools sends API request to get effective tools of a specific Tool Group by name.
-func (c *Client) GetToolGroupEffectiveTools(name string) ([]string, error) {
-	u, _ := c.constructAPIEndpoint("/tool-groups/" + name + "/effective-tools")
+// GetToolCollectionEffectiveTools sends API request to get effective tools of a specific Tool Collection by name.
+func (c *Client) GetToolCollectionEffectiveTools(name string) ([]string, error) {
+	u, _ := c.constructAPIEndpoint("/tool-collections/" + name + "/effective-tools")
 
 	req, err := c.newRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -144,10 +144,10 @@ func (c *Client) GetToolGroupEffectiveTools(name string) ([]string, error) {
 	return out.Tools, nil
 }
 
-func (c *Client) UpdateToolGroup(group *types.ToolGroup) (*types.UpdateToolGroupResponse, error) {
-	u, _ := c.constructAPIEndpoint("/tool-groups/" + group.Name)
+func (c *Client) UpdateToolCollection(collection *types.ToolCollection) (*types.UpdateToolCollectionResponse, error) {
+	u, _ := c.constructAPIEndpoint("/tool-collections/" + collection.Name)
 
-	body, err := json.Marshal(group)
+	body, err := json.Marshal(collection)
 	if err != nil {
 		return nil, err
 	}
@@ -168,15 +168,15 @@ func (c *Client) UpdateToolGroup(group *types.ToolGroup) (*types.UpdateToolGroup
 		return nil, c.parseErrorResponse(resp)
 	}
 
-	var updateResp types.UpdateToolGroupResponse
+	var updateResp types.UpdateToolCollectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&updateResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &updateResp, nil
 }
 
-// GetToolGroupConfigs returns all Tool Group configurations.
-// It is just a user-friendly wrapper around ListToolGroups().
-func (c *Client) GetToolGroupConfigs() ([]types.ToolGroup, error) {
-	return c.ListToolGroups()
+// GetToolCollectionConfigs returns all Tool Collection configurations.
+// It is just a user-friendly wrapper around ListToolCollections().
+func (c *Client) GetToolCollectionConfigs() ([]types.ToolCollection, error) {
+	return c.ListToolCollections()
 }

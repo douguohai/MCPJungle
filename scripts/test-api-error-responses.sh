@@ -499,7 +499,7 @@ assert_status \
 assert_status \
   "create tool group rejects invalid group name" \
   "POST" \
-  "/api/v0/tool-groups" \
+  "/api/v0/tool-collections" \
   "400" \
   "invalid group name" \
   "$ADMIN_TOKEN" \
@@ -508,7 +508,7 @@ assert_status \
 assert_status \
   "create tool group rejects empty effective tool set" \
   "POST" \
-  "/api/v0/tool-groups" \
+  "/api/v0/tool-collections" \
   "400" \
   "at least one tool" \
   "$ADMIN_TOKEN" \
@@ -517,7 +517,7 @@ assert_status \
 assert_status \
   "get tool group returns not found when group is missing" \
   "GET" \
-  "/api/v0/tool-groups/ghost-group" \
+  "/api/v0/tool-collections/ghost-group" \
   "404" \
   "not found" \
   "$ADMIN_TOKEN"
@@ -525,7 +525,7 @@ assert_status \
 assert_status \
   "update tool group returns not found when group is missing" \
   "PUT" \
-  "/api/v0/tool-groups/ghost-group" \
+  "/api/v0/tool-collections/ghost-group" \
   "404" \
   "not found" \
   "$ADMIN_TOKEN" \

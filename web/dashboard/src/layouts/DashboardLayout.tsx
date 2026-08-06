@@ -27,7 +27,7 @@ const baseMenuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "概览" },
   { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务器" },
   { key: "/tools", icon: <ToolOutlined />, label: "工具" },
-  { key: "/tool-groups", icon: <GroupOutlined />, label: "工具组" },
+  { key: "/tool-collections", icon: <GroupOutlined />, label: "工具集合" },
   { key: "/prompts", icon: <FileTextOutlined />, label: "提示词" },
   { key: "/resources", icon: <FileOutlined />, label: "资源" },
   { key: "/diagnostics", icon: <ApiOutlined />, label: "诊断" },

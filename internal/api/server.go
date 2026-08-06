@@ -17,7 +17,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	"github.com/mcpjungle/mcpjungle/internal/service/permission"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -46,7 +46,7 @@ type ServerOptions struct {
 	MCPService       *mcp.MCPService
 	ConfigService    *config.ServerConfigService
 	UserService      *user.UserService
-	ToolGroupService *toolgroup.ToolGroupService
+	ToolCollectionService *toolcollection.ToolCollectionService
 	DashboardService *dashboard.Service
 
 	OtelProviders *telemetry.Providers
@@ -71,7 +71,7 @@ type Server struct {
 
 	configService    *config.ServerConfigService
 	userService      *user.UserService
-	toolGroupService *toolgroup.ToolGroupService
+	toolCollectionService *toolcollection.ToolCollectionService
 	dashboardService *dashboard.Service
 
 	otelProviders *telemetry.Providers
@@ -81,10 +81,10 @@ type Server struct {
 	permissionService  *permission.Service
 	deviceTokenService  *devicetoken.Service
 
-	// groupMcpServers keeps track of mcp-go's server.SSEServer instances created for each tool group.
-	// These instances serve the requests made to tool groups' SSE tools.
-	// We need to maintain one instance for each group for sse to work correctly.
-	groupSseServers sync.Map
+	// collectionSseServers keeps track of mcp-go's server.SSEServer instances created for each tool collection.
+	// These instances serve the requests made to tool collections' SSE tools.
+	// We need to maintain one instance for each collection for sse to work correctly.
+	collectionSseServers sync.Map
 
 	// dashboardOAuthMu guards dashboardOAuthResults, which is a short-lived
 	// in-memory cache used by the browser-based dashboard OAuth flow.
@@ -115,7 +115,7 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		mcpService:            opts.MCPService,
 		configService:         opts.ConfigService,
 		userService:           opts.UserService,
-		toolGroupService:      opts.ToolGroupService,
+		toolCollectionService: opts.ToolCollectionService,
 		dashboardService:      opts.DashboardService,
 		otelProviders:         opts.OtelProviders,
 		metrics:               opts.Metrics,
@@ -259,10 +259,10 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	)
 
 	r.Any(
-		V0PathPrefix+"/groups/:name/mcp",
+		V0PathPrefix+"/collections/:name/mcp",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupMCPServerCallHandler(),
+		s.toolCollectionMCPServerCallHandler(),
 	)
 
 	// Set up the SSE transport-based MCP proxy server for the global /sse endpoint
@@ -281,16 +281,16 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	)
 
 	r.Any(
-		V0PathPrefix+"/groups/:name/sse",
+		V0PathPrefix+"/collections/:name/sse",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupSseMCPServerCallHandler(),
+		s.toolCollectionSseMCPServerCallHandler(),
 	)
 	r.Any(
-		V0PathPrefix+"/groups/:name/message",
+		V0PathPrefix+"/collections/:name/message",
 		s.requireInitialized(),
 		s.checkAuthForMcpProxyAccess(),
-		s.toolGroupSseMCPServerCallMessageHandler(),
+		s.toolCollectionSseMCPServerCallMessageHandler(),
 	)
 
 	// Setup /v0 API endpoints
@@ -365,13 +365,13 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			s.deleteUserHandler(),
 		)
 
-		// endpoints for managing tool groups
-		adminAPI.POST("/tool-groups", s.createToolGroupHandler())
-		adminAPI.GET("/tool-groups/:name", s.getToolGroupHandler())
-		adminAPI.GET("/tool-groups/:name/effective-tools", s.getToolGroupEffectiveToolsHandler())
-		adminAPI.GET("/tool-groups", s.listToolGroupsHandler())
-		adminAPI.DELETE("/tool-groups/:name", s.deleteToolGroupHandler())
-		adminAPI.PUT("/tool-groups/:name", s.updateToolGroupHandler())
+		// endpoints for managing tool collections
+		adminAPI.POST("/tool-collections", s.createToolCollectionHandler())
+		adminAPI.GET("/tool-collections/:name", s.getToolCollectionHandler())
+		adminAPI.GET("/tool-collections/:name/effective-tools", s.getToolCollectionEffectiveToolsHandler())
+		adminAPI.GET("/tool-collections", s.listToolCollectionsHandler())
+		adminAPI.DELETE("/tool-collections/:name", s.deleteToolCollectionHandler())
+		adminAPI.PUT("/tool-collections/:name", s.updateToolCollectionHandler())
 	}
 
 	if s.dashboardService != nil {
@@ -403,8 +403,8 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			dashboardAPI.GET("/oauth/callback", s.dashboardOAuthCallbackHandler())
 			dashboardAPI.GET("/oauth/session/:id", s.dashboardOAuthSessionHandler())
 			dashboardAPI.GET("/tools", s.dashboardToolsHandler())
-			dashboardAPI.GET("/tool-groups", s.dashboardToolGroupsHandler())
-			dashboardAPI.GET("/tool-groups/:name", s.dashboardGetToolGroupHandler())
+			dashboardAPI.GET("/tool-collections", s.dashboardToolCollectionsHandler())
+			dashboardAPI.GET("/tool-collections/:name", s.dashboardGetToolCollectionHandler())
 			dashboardAPI.GET("/prompts", s.dashboardPromptsHandler())
 			dashboardAPI.GET("/resources", s.dashboardResourcesHandler())
 			dashboardAPI.GET("/diagnostics", s.dashboardDiagnosticsHandler())
@@ -420,8 +420,8 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			dashboardAdminAPI.DELETE("/servers/:name", s.dashboardDeleteServerHandler())
 			dashboardAdminAPI.PATCH("/servers/:name/enabled", s.dashboardSetServerEnabledHandler())
 			dashboardAdminAPI.PATCH("/tools/:name/enabled", s.dashboardSetToolEnabledHandler())
-			dashboardAdminAPI.POST("/tool-groups", s.dashboardCreateToolGroupHandler())
-			dashboardAdminAPI.DELETE("/tool-groups/:name", s.dashboardDeleteToolGroupHandler())
+			dashboardAdminAPI.POST("/tool-collections", s.dashboardCreateToolCollectionHandler())
+			dashboardAdminAPI.DELETE("/tool-collections/:name", s.dashboardDeleteToolCollectionHandler())
 			dashboardAdminAPI.PATCH("/prompts/:name/enabled", s.dashboardSetPromptEnabledHandler())
 
 			// Analytics: per-user per-server call counts (admin only).

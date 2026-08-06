@@ -72,25 +72,25 @@ export interface DashboardToolsResponse {
   empty_state?: DashboardEmptyState;
 }
 
-export interface DashboardToolGroupTool {
+export interface DashboardToolCollectionTool {
   name: string;
   canonical_name: string;
   server: string;
   description?: string;
 }
 
-export interface DashboardToolGroup {
+export interface DashboardToolCollection {
   name: string;
   description?: string;
   tool_count: number;
-  tools: DashboardToolGroupTool[];
+  tools: DashboardToolCollectionTool[];
   streamable_http_endpoint: string;
   sse_endpoint: string;
   sse_message_endpoint: string;
 }
 
-export interface DashboardToolGroupsResponse {
-  tool_groups: DashboardToolGroup[];
+export interface DashboardToolCollectionsResponse {
+  tool_collections: DashboardToolCollection[];
   empty_state?: DashboardEmptyState;
 }
 
@@ -160,7 +160,7 @@ export interface DashboardRegisterServerInput {
   session_mode?: "stateless" | "stateful";
 }
 
-export interface DashboardCreateToolGroupInput {
+export interface DashboardCreateToolCollectionInput {
   name: string;
   description?: string;
   tools: string[];

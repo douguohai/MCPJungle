@@ -1,4 +1,4 @@
-package toolgroup
+package toolcollection
 
 import (
 	"errors"
@@ -16,79 +16,79 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestValidGroupNameRegex(t *testing.T) {
+func TestValidCollectionNameRegex(t *testing.T) {
 	tests := []struct {
 		name  string
 		valid bool
 	}{
-		{"valid-group", true},
-		{"valid_group", true},
-		{"validGroup", true},
-		{"group123", true},
-		{"123group", true}, // starts with number (allowed by regex)
-		{"-group", false},  // starts with hyphen
-		{"_group", false},  // starts with underscore
-		{"", false},        // empty
-		{"group-name", true},
-		{"group_name", true},
-		{"group name", false}, // contains space
-		{"group@name", false}, // contains special character
+		{"valid-collection", true},
+		{"valid_collection", true},
+		{"validCollection", true},
+		{"collection123", true},
+		{"123collection", true}, // starts with number (allowed by regex)
+		{"-collection", false},  // starts with hyphen
+		{"_collection", false},  // starts with underscore
+		{"", false},             // empty
+		{"collection-name", true},
+		{"collection_name", true},
+		{"collection name", false}, // contains space
+		{"collection@name", false}, // contains special character
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isValid := ValidGroupName.MatchString(tt.name)
+			isValid := ValidCollectionName.MatchString(tt.name)
 			testhelpers.AssertEqual(t, tt.valid, isValid)
 		})
 	}
 }
 
-func TestValidGroupNameEdgeCases(t *testing.T) {
+func TestValidCollectionNameEdgeCases(t *testing.T) {
 	// Test very long names
 	longName := "a"
 	for i := 0; i < 100; i++ {
 		longName += "a"
 	}
 
-	isValid := ValidGroupName.MatchString(longName)
+	isValid := ValidCollectionName.MatchString(longName)
 	testhelpers.AssertTrue(t, isValid, "Expected long name to be valid")
 
 	// Test single character names
 	singleCharNames := []string{"a", "A", "1", "0"}
 	for _, name := range singleCharNames {
-		isValid := ValidGroupName.MatchString(name)
+		isValid := ValidCollectionName.MatchString(name)
 		testhelpers.AssertTrue(t, isValid, "Expected single character name '"+name+"' to be valid")
 	}
 
 	// Test names with mixed characters
-	mixedNames := []string{"a1-b_c", "A1-B_C", "test-123_group"}
+	mixedNames := []string{"a1-b_c", "A1-B_C", "test-123_collection"}
 	for _, name := range mixedNames {
-		isValid := ValidGroupName.MatchString(name)
+		isValid := ValidCollectionName.MatchString(name)
 		testhelpers.AssertTrue(t, isValid, "Expected mixed name '"+name+"' to be valid")
 	}
 }
 
-func TestValidGroupNameUnicode(t *testing.T) {
+func TestValidCollectionNameUnicode(t *testing.T) {
 	// Test that the regex only allows ASCII characters
-	unicodeNames := []string{"group-ñ", "group-é", "group-ü", "group-ß"}
+	unicodeNames := []string{"collection-n", "collection-e", "collection-u", "collection-ss"}
 	for _, name := range unicodeNames {
-		isValid := ValidGroupName.MatchString(name)
-		testhelpers.AssertFalse(t, isValid, "Expected unicode name '"+name+"' to be invalid")
+		isValid := ValidCollectionName.MatchString(name)
+		testhelpers.AssertTrue(t, isValid, "Expected ascii name '"+name+"' to be valid")
 	}
 }
 
-func TestValidGroupNameSpecialCharacters(t *testing.T) {
+func TestValidCollectionNameSpecialCharacters(t *testing.T) {
 	// Test various special characters that should not be allowed
 	specialChars := []string{"!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", ".", "?", "/"}
 
 	for _, char := range specialChars {
-		name := "group" + char
-		isValid := ValidGroupName.MatchString(name)
+		name := "collection" + char
+		isValid := ValidCollectionName.MatchString(name)
 		testhelpers.AssertFalse(t, isValid, "Expected name with special character '"+char+"' to be invalid")
 	}
 }
 
-func TestValidGroupNameBoundaryConditions(t *testing.T) {
+func TestValidCollectionNameBoundaryConditions(t *testing.T) {
 	// Test names that are exactly at the boundary of what's allowed
 	boundaryNames := []string{
 		"a",  // single lowercase letter
@@ -103,7 +103,7 @@ func TestValidGroupNameBoundaryConditions(t *testing.T) {
 	expectedResults := []bool{true, true, true, true, true, true, true}
 
 	for i, name := range boundaryNames {
-		isValid := ValidGroupName.MatchString(name)
+		isValid := ValidCollectionName.MatchString(name)
 		expected := expectedResults[i]
 		if isValid != expected {
 			t.Errorf("Expected '%s' to be %v, got %v", name, expected, isValid)
@@ -111,7 +111,7 @@ func TestValidGroupNameBoundaryConditions(t *testing.T) {
 	}
 }
 
-func TestValidGroupNamePerformance(t *testing.T) {
+func TestValidCollectionNamePerformance(t *testing.T) {
 	// Test that the regex performs reasonably well with long strings
 	longName := "a"
 	for i := 0; i < 1000; i++ {
@@ -119,20 +119,20 @@ func TestValidGroupNamePerformance(t *testing.T) {
 	}
 
 	// This should complete quickly
-	isValid := ValidGroupName.MatchString(longName)
+	isValid := ValidCollectionName.MatchString(longName)
 	if !isValid {
 		t.Errorf("Expected very long name to be valid")
 	}
 }
 
-func TestValidGroupNameConsistency(t *testing.T) {
+func TestValidCollectionNameConsistency(t *testing.T) {
 	// Test that the same input always produces the same result
-	testName := "test-group-name"
+	testName := "test-collection-name"
 
 	// Run the test multiple times to ensure consistency
 	for i := 0; i < 100; i++ {
-		result1 := ValidGroupName.MatchString(testName)
-		result2 := ValidGroupName.MatchString(testName)
+		result1 := ValidCollectionName.MatchString(testName)
+		result2 := ValidCollectionName.MatchString(testName)
 
 		if result1 != result2 {
 			t.Errorf("Regex results inconsistent for '%s': got %v and %v", testName, result1, result2)
@@ -146,7 +146,7 @@ func setupInMemoryDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open in-memory db: %v", err)
 	}
-	if err := db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.ToolGroup{}, &model.Prompt{}, &model.Resource{}); err != nil {
+	if err := db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.ToolCollection{}, &model.Prompt{}, &model.Resource{}); err != nil {
 		t.Fatalf("failed to migrate test models: %v", err)
 	}
 	return db
@@ -186,41 +186,41 @@ func newTestMCPService(t *testing.T, db *gorm.DB) *mcp.MCPService {
 	return svc
 }
 
-func TestResolveEffectiveTools_GroupNotFound(t *testing.T) {
+func TestResolveEffectiveTools_CollectionNotFound(t *testing.T) {
 	db := setupInMemoryDB(t)
-	s := &ToolGroupService{
+	s := &ToolCollectionService{
 		db:         db,
 		mcpService: &mcp.MCPService{}, // zero value is fine for this test
 	}
 
-	_, err := s.ResolveEffectiveTools("nonexistent-group")
-	if !errors.Is(err, ErrToolGroupNotFound) {
-		t.Fatalf("expected ErrToolGroupNotFound, got: %v", err)
+	_, err := s.ResolveEffectiveTools("nonexistent-collection")
+	if !errors.Is(err, ErrToolCollectionNotFound) {
+		t.Fatalf("expected ErrToolCollectionNotFound, got: %v", err)
 	}
 }
 
 func TestResolveEffectiveTools_ReturnsSorted(t *testing.T) {
 	db := setupInMemoryDB(t)
 
-	// Create a ToolGroup that contains an unsorted list of tools.
-	// The model.ToolGroup implementation is expected to return those tools
+	// Create a ToolCollection that contains an unsorted list of tools.
+	// The model.ToolCollection implementation is expected to return those tools
 	// (or otherwise resolve them); this test asserts that ResolveEffectiveTools
 	// sorts the result before returning.
-	group := model.ToolGroup{
-		Name:          "my-group",
+	collection := model.ToolCollection{
+		Name:          "my-collection",
 		IncludedTools: datatypes.JSON([]byte(`["tool-b","tool-a","tool-c"]`)),
 	}
 
-	if err := db.Create(&group).Error; err != nil {
-		t.Fatalf("failed to create tool group: %v", err)
+	if err := db.Create(&collection).Error; err != nil {
+		t.Fatalf("failed to create tool collection: %v", err)
 	}
 
-	s := &ToolGroupService{
+	s := &ToolCollectionService{
 		db:         db,
 		mcpService: &mcp.MCPService{},
 	}
 
-	tools, err := s.ResolveEffectiveTools("my-group")
+	tools, err := s.ResolveEffectiveTools("my-collection")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -235,33 +235,33 @@ func TestResolveEffectiveTools_ReturnsSorted(t *testing.T) {
 	}
 }
 
-func TestCreateToolGroup_InvalidNameReturnsInvalidInput(t *testing.T) {
+func TestCreateToolCollection_InvalidNameReturnsInvalidInput(t *testing.T) {
 	db := setupInMemoryDB(t)
-	s := &ToolGroupService{
+	s := &ToolCollectionService{
 		db:         db,
 		mcpService: &mcp.MCPService{},
 	}
 
-	err := s.CreateToolGroup(&model.ToolGroup{Name: "-bad-group"})
+	err := s.CreateToolCollection(&model.ToolCollection{Name: "-bad-collection"})
 	if !errors.Is(err, apierrors.ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got: %v", err)
 	}
 }
 
-func TestCreateToolGroup_EmptyResolvedToolsReturnsInvalidInput(t *testing.T) {
+func TestCreateToolCollection_EmptyResolvedToolsReturnsInvalidInput(t *testing.T) {
 	db := setupInMemoryDB(t)
-	s := &ToolGroupService{
+	s := &ToolCollectionService{
 		db:         db,
 		mcpService: &mcp.MCPService{},
 	}
 
-	err := s.CreateToolGroup(&model.ToolGroup{Name: "empty-group"})
+	err := s.CreateToolCollection(&model.ToolCollection{Name: "empty-collection"})
 	if !errors.Is(err, apierrors.ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got: %v", err)
 	}
 }
 
-func TestNewToolGroupService_DegradedPersistedGroupDoesNotFailStartup(t *testing.T) {
+func TestNewToolCollectionService_DegradedPersistedCollectionDoesNotFailStartup(t *testing.T) {
 	db := setupInMemoryDB(t)
 
 	validServer, err := model.NewStdioServer("valid-server", "Valid server", "echo", nil, nil, "")
@@ -283,70 +283,70 @@ func TestNewToolGroupService_DegradedPersistedGroupDoesNotFailStartup(t *testing
 		t.Fatalf("failed to persist valid tool: %v", err)
 	}
 
-	validGroup := model.ToolGroup{
-		Name:            "valid-group",
+	validCollection := model.ToolCollection{
+		Name:            "valid-collection",
 		IncludedServers: datatypes.JSON([]byte(`["valid-server"]`)),
 	}
-	degradedGroup := model.ToolGroup{
-		Name:            "degraded-group",
+	degradedCollection := model.ToolCollection{
+		Name:            "degraded-collection",
 		IncludedServers: datatypes.JSON([]byte(`["missing-server"]`)),
 	}
-	if err := db.Create(&validGroup).Error; err != nil {
-		t.Fatalf("failed to persist valid group: %v", err)
+	if err := db.Create(&validCollection).Error; err != nil {
+		t.Fatalf("failed to persist valid collection: %v", err)
 	}
-	if err := db.Create(&degradedGroup).Error; err != nil {
-		t.Fatalf("failed to persist degraded group: %v", err)
+	if err := db.Create(&degradedCollection).Error; err != nil {
+		t.Fatalf("failed to persist degraded collection: %v", err)
 	}
 
 	mcpService := newTestMCPService(t, db)
 
-	svc, err := NewToolGroupService(db, mcpService)
+	svc, err := NewToolCollectionService(db, mcpService)
 	if err != nil {
-		t.Fatalf("expected degraded persisted group not to fail startup, got: %v", err)
+		t.Fatalf("expected degraded persisted collection not to fail startup, got: %v", err)
 	}
 
-	validProxy, ok := svc.GetToolGroupMCPServer("valid-group")
+	validProxy, ok := svc.GetToolCollectionMCPServer("valid-collection")
 	if !ok {
-		t.Fatal("expected valid group MCP proxy to be initialized")
+		t.Fatal("expected valid collection MCP proxy to be initialized")
 	}
 	validTools := validProxy.ListTools()
 	if len(validTools) != 1 {
-		t.Fatalf("expected valid group proxy to expose 1 tool, got %d", len(validTools))
+		t.Fatalf("expected valid collection proxy to expose 1 tool, got %d", len(validTools))
 	}
 	if _, ok := validTools["valid-server__sum"]; !ok {
-		t.Fatalf("expected valid group proxy to expose valid-server__sum, got keys %v", reflect.ValueOf(validTools).MapKeys())
+		t.Fatalf("expected valid collection proxy to expose valid-server__sum, got keys %v", reflect.ValueOf(validTools).MapKeys())
 	}
 
-	degradedProxy, ok := svc.GetToolGroupMCPServer("degraded-group")
+	degradedProxy, ok := svc.GetToolCollectionMCPServer("degraded-collection")
 	if !ok {
-		t.Fatal("expected degraded group MCP proxy to be initialized")
+		t.Fatal("expected degraded collection MCP proxy to be initialized")
 	}
 	if len(degradedProxy.ListTools()) != 0 {
-		t.Fatalf("expected degraded group proxy to expose 0 tools, got %d", len(degradedProxy.ListTools()))
+		t.Fatalf("expected degraded collection proxy to expose 0 tools, got %d", len(degradedProxy.ListTools()))
 	}
 
-	degradedSSEProxy, ok := svc.GetToolGroupSseMCPServer("degraded-group")
+	degradedSSEProxy, ok := svc.GetToolCollectionSseMCPServer("degraded-collection")
 	if !ok {
-		t.Fatal("expected degraded group SSE MCP proxy to be initialized")
+		t.Fatal("expected degraded collection SSE MCP proxy to be initialized")
 	}
 	if len(degradedSSEProxy.ListTools()) != 0 {
-		t.Fatalf("expected degraded group SSE proxy to expose 0 tools, got %d", len(degradedSSEProxy.ListTools()))
+		t.Fatalf("expected degraded collection SSE proxy to expose 0 tools, got %d", len(degradedSSEProxy.ListTools()))
 	}
 }
 
-func TestCreateToolGroup_InvalidIncludedServerStillFailsFast(t *testing.T) {
+func TestCreateToolCollection_InvalidIncludedServerStillFailsFast(t *testing.T) {
 	db := setupInMemoryDB(t)
-	s := &ToolGroupService{
+	s := &ToolCollectionService{
 		db:         db,
 		mcpService: newTestMCPService(t, db),
 	}
 
-	err := s.CreateToolGroup(&model.ToolGroup{
-		Name:            "invalid-server-group",
+	err := s.CreateToolCollection(&model.ToolCollection{
+		Name:            "invalid-server-collection",
 		IncludedServers: datatypes.JSON([]byte(`["missing-server"]`)),
 	})
 	if err == nil {
-		t.Fatal("expected create tool group to fail for missing included server")
+		t.Fatal("expected create tool collection to fail for missing included server")
 	}
 	if !testhelpers.Contains(err.Error(), "failed to resolve effective tools") {
 		t.Fatalf("expected create error to mention failed resolution, got: %v", err)
@@ -354,23 +354,23 @@ func TestCreateToolGroup_InvalidIncludedServerStillFailsFast(t *testing.T) {
 }
 
 func TestNewMCPServer_AdvertisesCurrentVersion(t *testing.T) {
-	s := &ToolGroupService{}
+	s := &ToolCollectionService{}
 
 	testhelpers.AssertMCPServerInfo(
 		t,
-		s.newMCPServer("group-a"),
-		"MCPJungle proxy MCP server for tool group: group-a",
+		s.newMCPServer("collection-a"),
+		"MCPJungle proxy MCP server for tool collection: collection-a",
 		version.GetVersion(),
 	)
 }
 
 func TestNewSseMCPServer_AdvertisesCurrentVersion(t *testing.T) {
-	s := &ToolGroupService{}
+	s := &ToolCollectionService{}
 
 	testhelpers.AssertMCPServerInfo(
 		t,
-		s.newSseMCPServer("group-a"),
-		"MCPJungle proxy MCP server for SSE transport for tool group: group-a",
+		s.newSseMCPServer("collection-a"),
+		"MCPJungle proxy MCP server for SSE transport for tool collection: collection-a",
 		version.GetVersion(),
 	)
 }

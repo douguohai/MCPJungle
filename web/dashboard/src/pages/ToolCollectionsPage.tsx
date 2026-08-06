@@ -2,29 +2,29 @@ import { useEffect, useState } from "react";
 import { Table, Card, Alert, Spin, Button, Popconfirm, Drawer, List, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { PlusOutlined } from "@ant-design/icons";
-import { toolGroupsApi } from "../api/toolGroups";
+import { toolCollectionsApi } from "../api/toolCollections";
 import { toolsApi } from "../api/tools";
 import { extractError } from "../api/client";
 import type {
-  DashboardToolGroup,
-  DashboardToolGroupsResponse,
+  DashboardToolCollection,
+  DashboardToolCollectionsResponse,
   DashboardTool,
 } from "../types";
 import CopyButton from "../components/CopyButton";
 import EmptyStateCard from "../components/EmptyStateCard";
-import ToolGroupForm from "../components/ToolGroupForm";
+import ToolCollectionForm from "../components/ToolCollectionForm";
 
-export default function ToolGroupsPage() {
-  const [data, setData] = useState<DashboardToolGroupsResponse | null>(null);
+export default function ToolCollectionsPage() {
+  const [data, setData] = useState<DashboardToolCollectionsResponse | null>(null);
   const [toolsData, setToolsData] = useState<DashboardTool[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
-  const [detail, setDetail] = useState<DashboardToolGroup | null>(null);
+  const [detail, setDetail] = useState<DashboardToolCollection | null>(null);
 
   const load = () => {
     setLoading(true);
-    Promise.all([toolGroupsApi.list(), toolsApi.list()])
+    Promise.all([toolCollectionsApi.list(), toolsApi.list()])
       .then(([g, t]) => {
         setData(g);
         setToolsData(t.tools ?? []);
@@ -41,7 +41,7 @@ export default function ToolGroupsPage() {
 
   const remove = async (name: string) => {
     try {
-      await toolGroupsApi.remove(name);
+      await toolCollectionsApi.remove(name);
       message.success(`已删除 ${name}`);
       load();
     } catch (e) {
@@ -49,7 +49,7 @@ export default function ToolGroupsPage() {
     }
   };
 
-  const columns: ColumnsType<DashboardToolGroup> = [
+  const columns: ColumnsType<DashboardToolCollection> = [
     { title: "名称", dataIndex: "name" },
     { title: "描述", dataIndex: "description", ellipsis: true },
     { title: "工具数", dataIndex: "tool_count", width: 80 },
@@ -87,18 +87,18 @@ export default function ToolGroupsPage() {
     </Button>
   );
 
-  if (data?.empty_state && (!data.tool_groups || data.tool_groups.length === 0)) {
+  if (data?.empty_state && (!data.tool_collections || data.tool_collections.length === 0)) {
     return (
       <>
         <EmptyStateCard
           state={data.empty_state}
           action={
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-              创建第一个工具组
+              创建第一个工具集合
             </Button>
           }
         />
-        <ToolGroupForm
+        <ToolCollectionForm
           open={formOpen}
           onClose={() => setFormOpen(false)}
           onCreated={load}
@@ -109,18 +109,18 @@ export default function ToolGroupsPage() {
   }
 
   return (
-    <Card title="工具组" extra={addButton}>
+    <Card title="工具集合" extra={addButton}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        工具组把来自不同 MCP 服务器的多个工具打包成一个虚拟服务，提供独立的调用端点，方便按场景分发给 AI 客户端。
+        工具集合把来自不同 MCP 服务器的多个工具打包成一个虚拟服务，提供独立的调用端点，方便按场景分发给 AI 客户端。
       </Typography.Paragraph>
       <Table
         rowKey="name"
-        dataSource={data?.tool_groups ?? []}
+        dataSource={data?.tool_collections ?? []}
         columns={columns}
         loading={loading}
         pagination={{ pageSize: 20 }}
       />
-      <ToolGroupForm
+      <ToolCollectionForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onCreated={load}

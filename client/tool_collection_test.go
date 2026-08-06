@@ -10,15 +10,15 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
-func TestCreateToolGroup(t *testing.T) {
+func TestCreateToolCollection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful creation", func(t *testing.T) {
-		expectedResponse := &types.CreateToolGroupResponse{
-			ToolGroupEndpoints: &types.ToolGroupEndpoints{
-				StreamableHTTPEndpoint: "/api/v0/tool-groups/test-group",
-				SSEEndpoint:            "/api/v0/tool-groups/test-group/sse",
-				SSEMessageEndpoint:     "/api/v0/tool-groups/test-group/sse/message",
+		expectedResponse := &types.CreateToolCollectionResponse{
+			ToolCollectionEndpoints: &types.ToolCollectionEndpoints{
+				StreamableHTTPEndpoint: "/api/v0/tool-collections/test-collection",
+				SSEEndpoint:            "/api/v0/tool-collections/test-collection/sse",
+				SSEMessageEndpoint:     "/api/v0/tool-collections/test-collection/sse/message",
 			},
 		}
 
@@ -27,8 +27,8 @@ func TestCreateToolGroup(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("Expected POST method, got %s", r.Method)
 			}
-			if !strings.HasSuffix(r.URL.Path, "/tool-groups") {
-				t.Errorf("Expected path to end with /tool-groups, got %s", r.URL.Path)
+			if !strings.HasSuffix(r.URL.Path, "/tool-collections") {
+				t.Errorf("Expected path to end with /tool-collections, got %s", r.URL.Path)
 			}
 
 			// Verify content type
@@ -38,13 +38,13 @@ func TestCreateToolGroup(t *testing.T) {
 			}
 
 			// Verify request body
-			var toolGroup types.ToolGroup
-			if err := json.NewDecoder(r.Body).Decode(&toolGroup); err != nil {
+			var toolCollection types.ToolCollection
+			if err := json.NewDecoder(r.Body).Decode(&toolCollection); err != nil {
 				t.Fatalf("Failed to decode request body: %v", err)
 			}
 
-			if toolGroup.Name != "test-group" {
-				t.Errorf("Expected Name 'test-group', got %s", toolGroup.Name)
+			if toolCollection.Name != "test-collection" {
+				t.Errorf("Expected Name 'test-collection', got %s", toolCollection.Name)
 			}
 
 			// Return success response
@@ -55,13 +55,13 @@ func TestCreateToolGroup(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		toolGroup := &types.ToolGroup{
-			Name:          "test-group",
-			Description:   "Test tool group",
+		toolCollection := &types.ToolCollection{
+			Name:          "test-collection",
+			Description:   "Test tool collection",
 			IncludedTools: []string{"tool1", "tool2"},
 		}
 
-		response, err := client.CreateToolGroup(toolGroup)
+		response, err := client.CreateToolCollection(toolCollection)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -74,18 +74,18 @@ func TestCreateToolGroup(t *testing.T) {
 	t.Run("server error response", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("Invalid tool group configuration"))
+			_, _ = w.Write([]byte("Invalid tool collection configuration"))
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		toolGroup := &types.ToolGroup{
-			Name:          "test-group",
-			Description:   "Test tool group",
+		toolCollection := &types.ToolCollection{
+			Name:          "test-collection",
+			Description:   "Test tool collection",
 			IncludedTools: []string{"tool1"},
 		}
 
-		response, err := client.CreateToolGroup(toolGroup)
+		response, err := client.CreateToolCollection(toolCollection)
 
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -94,20 +94,20 @@ func TestCreateToolGroup(t *testing.T) {
 			t.Error("Expected nil response on error")
 		}
 
-		expectedError := "request failed with status: 400, message: Invalid tool group configuration"
+		expectedError := "request failed with status: 400, message: Invalid tool collection configuration"
 		if !strings.Contains(err.Error(), expectedError) {
 			t.Errorf("Expected error to contain %s, got %s", expectedError, err.Error())
 		}
 	})
 }
 
-func TestGetToolGroup(t *testing.T) {
+func TestGetToolCollection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful retrieval", func(t *testing.T) {
-		expectedGroup := &types.ToolGroup{
-			Name:          "test-group",
-			Description:   "Test tool group",
+		expectedCollection := &types.ToolCollection{
+			Name:          "test-collection",
+			Description:   "Test tool collection",
 			IncludedTools: []string{"tool1", "tool2"},
 		}
 
@@ -116,70 +116,70 @@ func TestGetToolGroup(t *testing.T) {
 			if r.Method != http.MethodGet {
 				t.Errorf("Expected GET method, got %s", r.Method)
 			}
-			if !strings.HasSuffix(r.URL.Path, "/tool-groups/test-group") {
-				t.Errorf("Expected path to end with /tool-groups/test-group, got %s", r.URL.Path)
+			if !strings.HasSuffix(r.URL.Path, "/tool-collections/test-collection") {
+				t.Errorf("Expected path to end with /tool-collections/test-collection, got %s", r.URL.Path)
 			}
 
 			// Return success response
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(expectedGroup)
+			_ = json.NewEncoder(w).Encode(expectedCollection)
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		group, err := client.GetToolGroup("test-group")
+		collection, err := client.GetToolCollection("test-collection")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		if group.Name != expectedGroup.Name {
-			t.Errorf("Expected Name %s, got %s", expectedGroup.Name, group.Name)
+		if collection.Name != expectedCollection.Name {
+			t.Errorf("Expected Name %s, got %s", expectedCollection.Name, collection.Name)
 		}
-		if group.Description != expectedGroup.Description {
-			t.Errorf("Expected Description %s, got %s", expectedGroup.Description, group.Description)
+		if collection.Description != expectedCollection.Description {
+			t.Errorf("Expected Description %s, got %s", expectedCollection.Description, collection.Description)
 		}
-		if len(group.IncludedTools) != len(expectedGroup.IncludedTools) {
-			t.Errorf("Expected IncludedTools length %d, got %d", len(expectedGroup.IncludedTools), len(group.IncludedTools))
+		if len(collection.IncludedTools) != len(expectedCollection.IncludedTools) {
+			t.Errorf("Expected IncludedTools length %d, got %d", len(expectedCollection.IncludedTools), len(collection.IncludedTools))
 		}
 	})
 
-	t.Run("group not found", func(t *testing.T) {
+	t.Run("collection not found", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte("Tool group not found"))
+			_, _ = w.Write([]byte("Tool collection not found"))
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		group, err := client.GetToolGroup("non-existent-group")
+		collection, err := client.GetToolCollection("non-existent-collection")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
 		}
-		if group != nil {
-			t.Error("Expected nil group on error")
+		if collection != nil {
+			t.Error("Expected nil collection on error")
 		}
 
-		expectedError := "request failed with status: 404, message: Tool group not found"
+		expectedError := "request failed with status: 404, message: Tool collection not found"
 		if !strings.Contains(err.Error(), expectedError) {
 			t.Errorf("Expected error to contain %s, got %s", expectedError, err.Error())
 		}
 	})
 }
 
-func TestDeleteToolGroup(t *testing.T) {
+func TestDeleteToolCollection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful deletion", func(t *testing.T) {
-		groupName := "test-group"
+		collectionName := "test-collection"
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Verify request method and path
 			if r.Method != "DELETE" {
 				t.Errorf("Expected DELETE method, got %s", r.Method)
 			}
-			expectedPath := "/api/v0/tool-groups/" + groupName
+			expectedPath := "/api/v0/tool-collections/" + collectionName
 			if !strings.HasSuffix(r.URL.Path, expectedPath) {
 				t.Errorf("Expected path to end with %s, got %s", expectedPath, r.URL.Path)
 			}
@@ -190,46 +190,46 @@ func TestDeleteToolGroup(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		err := client.DeleteToolGroup(groupName)
+		err := client.DeleteToolCollection(collectionName)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 	})
 
-	t.Run("group not found", func(t *testing.T) {
+	t.Run("collection not found", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte("Tool group not found"))
+			_, _ = w.Write([]byte("Tool collection not found"))
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		err := client.DeleteToolGroup("non-existent-group")
+		err := client.DeleteToolCollection("non-existent-collection")
 
 		if err == nil {
 			t.Error("Expected error, got nil")
 		}
 
-		expectedError := "request failed with status: 404, message: Tool group not found"
+		expectedError := "request failed with status: 404, message: Tool collection not found"
 		if !strings.Contains(err.Error(), expectedError) {
 			t.Errorf("Expected error to contain %s, got %s", expectedError, err.Error())
 		}
 	})
 }
 
-func TestListToolGroups(t *testing.T) {
+func TestListToolCollections(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful list", func(t *testing.T) {
-		expectedGroups := []*types.ToolGroup{
+		expectedCollections := []*types.ToolCollection{
 			{
-				Name:          "group1",
-				Description:   "First group",
+				Name:          "collection1",
+				Description:   "First collection",
 				IncludedTools: []string{"tool1"},
 			},
 			{
-				Name:          "group2",
-				Description:   "Second group",
+				Name:          "collection2",
+				Description:   "Second collection",
 				IncludedTools: []string{"tool2", "tool3"},
 			},
 		}
@@ -239,30 +239,30 @@ func TestListToolGroups(t *testing.T) {
 			if r.Method != http.MethodGet {
 				t.Errorf("Expected GET method, got %s", r.Method)
 			}
-			if !strings.HasSuffix(r.URL.Path, "/tool-groups") {
-				t.Errorf("Expected path to end with /tool-groups, got %s", r.URL.Path)
+			if !strings.HasSuffix(r.URL.Path, "/tool-collections") {
+				t.Errorf("Expected path to end with /tool-collections, got %s", r.URL.Path)
 			}
 
 			// Return success response
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(expectedGroups)
+			_ = json.NewEncoder(w).Encode(expectedCollections)
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		groups, err := client.ListToolGroups()
+		collections, err := client.ListToolCollections()
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		if len(groups) != len(expectedGroups) {
-			t.Errorf("Expected %d groups, got %d", len(expectedGroups), len(groups))
+		if len(collections) != len(expectedCollections) {
+			t.Errorf("Expected %d collections, got %d", len(expectedCollections), len(collections))
 		}
 
-		for i, group := range groups {
-			if group.Name != expectedGroups[i].Name {
-				t.Errorf("Expected group[%d].Name %s, got %s", i, expectedGroups[i].Name, group.Name)
+		for i, collection := range collections {
+			if collection.Name != expectedCollections[i].Name {
+				t.Errorf("Expected collection[%d].Name %s, got %s", i, expectedCollections[i].Name, collection.Name)
 			}
 		}
 	})
@@ -276,13 +276,13 @@ func TestListToolGroups(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		groups, err := client.ListToolGroups()
+		collections, err := client.ListToolCollections()
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		if len(groups) != 0 {
-			t.Errorf("Expected empty list, got %d groups", len(groups))
+		if len(collections) != 0 {
+			t.Errorf("Expected empty list, got %d collections", len(collections))
 		}
 	})
 
@@ -294,13 +294,13 @@ func TestListToolGroups(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		groups, err := client.ListToolGroups()
+		collections, err := client.ListToolCollections()
 
 		if err == nil {
 			t.Error("Expected error, got nil")
 		}
-		if groups != nil {
-			t.Error("Expected nil groups on error")
+		if collections != nil {
+			t.Error("Expected nil collections on error")
 		}
 
 		expectedError := "request failed with status: 500, message: Internal server error"
@@ -310,7 +310,7 @@ func TestListToolGroups(t *testing.T) {
 	})
 }
 
-func TestGetToolGroupEffectiveTools(t *testing.T) {
+func TestGetToolCollectionEffectiveTools(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful retrieval", func(t *testing.T) {
@@ -320,8 +320,8 @@ func TestGetToolGroupEffectiveTools(t *testing.T) {
 			if r.Method != http.MethodGet {
 				t.Errorf("Expected GET method, got %s", r.Method)
 			}
-			if !strings.HasSuffix(r.URL.Path, "/tool-groups/test-group/effective-tools") {
-				t.Errorf("Expected path to end with /tool-groups/test-group/effective-tools, got %s", r.URL.Path)
+			if !strings.HasSuffix(r.URL.Path, "/tool-collections/test-collection/effective-tools") {
+				t.Errorf("Expected path to end with /tool-collections/test-collection/effective-tools, got %s", r.URL.Path)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
@@ -331,7 +331,7 @@ func TestGetToolGroupEffectiveTools(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		tools, err := client.GetToolGroupEffectiveTools("test-group")
+		tools, err := client.GetToolCollectionEffectiveTools("test-collection")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -346,15 +346,15 @@ func TestGetToolGroupEffectiveTools(t *testing.T) {
 		}
 	})
 
-	t.Run("group not found", func(t *testing.T) {
+	t.Run("collection not found", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte("Tool group not found"))
+			_, _ = w.Write([]byte("Tool collection not found"))
 		}))
 		defer server.Close()
 
 		client := NewClient(server.URL, "test-token", &http.Client{})
-		tools, err := client.GetToolGroupEffectiveTools("missing")
+		tools, err := client.GetToolCollectionEffectiveTools("missing")
 		if err == nil {
 			t.Fatal("Expected error, got nil")
 		}

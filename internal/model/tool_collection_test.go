@@ -19,15 +19,15 @@ func (m *mockToolResolver) ListToolsByServer(serverName string) ([]Tool, error) 
 	return []Tool{}, nil
 }
 
-func TestToolGroup_GetTools(t *testing.T) {
+func TestToolCollection_GetTools(t *testing.T) {
 	tools := []string{"tool1", "tool2"}
 	toolsJSON, _ := json.Marshal(tools)
 
-	group := &ToolGroup{
+	collection := &ToolCollection{
 		IncludedTools: datatypes.JSON(toolsJSON),
 	}
 
-	result, err := group.GetTools()
+	result, err := collection.GetTools()
 	if err != nil {
 		t.Fatalf("GetTools() failed: %v", err)
 	}
@@ -40,15 +40,15 @@ func TestToolGroup_GetTools(t *testing.T) {
 	}
 }
 
-func TestToolGroup_GetServers(t *testing.T) {
+func TestToolCollection_GetServers(t *testing.T) {
 	servers := []string{"server1", "server2"}
 	serversJSON, _ := json.Marshal(servers)
 
-	group := &ToolGroup{
+	collection := &ToolCollection{
 		IncludedServers: datatypes.JSON(serversJSON),
 	}
 
-	result, err := group.GetServers()
+	result, err := collection.GetServers()
 	if err != nil {
 		t.Fatalf("GetServers() failed: %v", err)
 	}
@@ -61,15 +61,15 @@ func TestToolGroup_GetServers(t *testing.T) {
 	}
 }
 
-func TestToolGroup_GetExcludedTools(t *testing.T) {
+func TestToolCollection_GetExcludedTools(t *testing.T) {
 	tools := []string{"excluded1", "excluded2"}
 	toolsJSON, _ := json.Marshal(tools)
 
-	group := &ToolGroup{
+	collection := &ToolCollection{
 		ExcludedTools: datatypes.JSON(toolsJSON),
 	}
 
-	result, err := group.GetExcludedTools()
+	result, err := collection.GetExcludedTools()
 	if err != nil {
 		t.Fatalf("GetExcludedTools() failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestToolGroup_GetExcludedTools(t *testing.T) {
 	}
 }
 
-func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
+func TestToolCollection_ResolveEffectiveTools(t *testing.T) {
 	// Create mock resolver with some test data
 	resolver := &mockToolResolver{
 		serverTools: map[string][]Tool{
@@ -102,11 +102,11 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		tools := []string{"manual__tool1", "manual__tool2"}
 		toolsJSON, _ := json.Marshal(tools)
 
-		group := &ToolGroup{
+		collection := &ToolCollection{
 			IncludedTools: datatypes.JSON(toolsJSON),
 		}
 
-		result, err := group.ResolveEffectiveTools(resolver)
+		result, err := collection.ResolveEffectiveTools(resolver)
 		if err != nil {
 			t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 		}
@@ -129,11 +129,11 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		servers := []string{"time"}
 		serversJSON, _ := json.Marshal(servers)
 
-		group := &ToolGroup{
+		collection := &ToolCollection{
 			IncludedServers: datatypes.JSON(serversJSON),
 		}
 
-		result, err := group.ResolveEffectiveTools(resolver)
+		result, err := collection.ResolveEffectiveTools(resolver)
 		if err != nil {
 			t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 		}
@@ -162,12 +162,12 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excluded := []string{"time__convert_time", "deepwiki__search_wiki"}
 		excludedJSON, _ := json.Marshal(excluded)
 
-		group := &ToolGroup{
+		collection := &ToolCollection{
 			IncludedServers: datatypes.JSON(serversJSON),
 			ExcludedTools:   datatypes.JSON(excludedJSON),
 		}
 
-		result, err := group.ResolveEffectiveTools(resolver)
+		result, err := collection.ResolveEffectiveTools(resolver)
 		if err != nil {
 			t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 		}
@@ -208,13 +208,13 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excluded := []string{"time__convert_time"}
 		excludedJSON, _ := json.Marshal(excluded)
 
-		group := &ToolGroup{
+		collection := &ToolCollection{
 			IncludedTools:   datatypes.JSON(toolsJSON),
 			IncludedServers: datatypes.JSON(serversJSON),
 			ExcludedTools:   datatypes.JSON(excludedJSON),
 		}
 
-		result, err := group.ResolveEffectiveTools(resolver)
+		result, err := collection.ResolveEffectiveTools(resolver)
 		if err != nil {
 			t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 		}
@@ -249,12 +249,12 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 		excluded := []string{"time__get_current_time"}
 		excludedJSON, _ := json.Marshal(excluded)
 
-		group := &ToolGroup{
+		collection := &ToolCollection{
 			IncludedTools: datatypes.JSON(toolsJSON),
 			ExcludedTools: datatypes.JSON(excludedJSON),
 		}
 
-		result, err := group.ResolveEffectiveTools(resolver)
+		result, err := collection.ResolveEffectiveTools(resolver)
 		if err != nil {
 			t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 		}
@@ -269,19 +269,19 @@ func TestToolGroup_ResolveEffectiveTools(t *testing.T) {
 	})
 }
 
-func TestToolGroup_ResolveEffectiveTools_EmptyGroup(t *testing.T) {
+func TestToolCollection_ResolveEffectiveTools_EmptyCollection(t *testing.T) {
 	resolver := &mockToolResolver{
 		serverTools: map[string][]Tool{},
 	}
 
-	group := &ToolGroup{}
+	collection := &ToolCollection{}
 
-	result, err := group.ResolveEffectiveTools(resolver)
+	result, err := collection.ResolveEffectiveTools(resolver)
 	if err != nil {
 		t.Fatalf("ResolveEffectiveTools() failed: %v", err)
 	}
 
 	if len(result) != 0 {
-		t.Errorf("Expected 0 tools for empty group, got %d", len(result))
+		t.Errorf("Expected 0 tools for empty collection, got %d", len(result))
 	}
 }

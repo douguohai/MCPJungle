@@ -9,13 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	mcpSvc "github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 )
 
-// setupToolGroupServer creates a Server with a real ToolGroupService backed by an in-memory DB.
-func setupToolGroupServer(t *testing.T) *Server {
+// setupToolCollectionServer creates a Server with a real ToolCollectionService backed by an in-memory DB.
+func setupToolCollectionServer(t *testing.T) *Server {
 	t.Helper()
 	setup := testhelpers.SetupTestDB(t)
 	t.Cleanup(setup.Cleanup)
@@ -33,22 +33,22 @@ func setupToolGroupServer(t *testing.T) *Server {
 		t.Fatalf("failed to create MCP service: %v", err)
 	}
 
-	tgSvc, err := toolgroup.NewToolGroupService(setup.DB, svc)
+	tcSvc, err := toolcollection.NewToolCollectionService(setup.DB, svc)
 	if err != nil {
-		t.Fatalf("failed to create tool group service: %v", err)
+		t.Fatalf("failed to create tool collection service: %v", err)
 	}
 
-	return &Server{toolGroupService: tgSvc}
+	return &Server{toolCollectionService: tcSvc}
 }
 
-func TestGetToolGroupHandler_NotFound(t *testing.T) {
+func TestGetToolCollectionHandler_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	s := setupToolGroupServer(t)
+	s := setupToolCollectionServer(t)
 
 	router := gin.New()
-	router.GET("/groups/:name", s.getToolGroupHandler())
+	router.GET("/collections/:name", s.getToolCollectionHandler())
 
-	req := httptest.NewRequest(http.MethodGet, "/groups/ghost-group", nil)
+	req := httptest.NewRequest(http.MethodGet, "/collections/ghost-collection", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -56,15 +56,15 @@ func TestGetToolGroupHandler_NotFound(t *testing.T) {
 	testhelpers.AssertStringContains(t, w.Body.String(), "not found")
 }
 
-func TestUpdateToolGroupHandler_NotFound(t *testing.T) {
+func TestUpdateToolCollectionHandler_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	s := setupToolGroupServer(t)
+	s := setupToolCollectionServer(t)
 
 	router := gin.New()
-	router.PUT("/groups/:name", s.updateToolGroupHandler())
+	router.PUT("/collections/:name", s.updateToolCollectionHandler())
 
-	req := httptest.NewRequest(http.MethodPut, "/groups/ghost-group",
-		strings.NewReader(`{"name":"ghost-group","description":"updated"}`))
+	req := httptest.NewRequest(http.MethodPut, "/collections/ghost-collection",
+		strings.NewReader(`{"name":"ghost-collection","description":"updated"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

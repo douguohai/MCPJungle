@@ -12,15 +12,15 @@ import (
 )
 
 // -----------------------------------------------------------------------
-// Dev mode – tool groups: CRUD
+// Dev mode – tool collections: CRUD
 // -----------------------------------------------------------------------
 
-func TestE2E_DevMode_ToolGroup_Create_Get_List_Delete(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_Create_Get_List_Delete(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
 	// Create
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "echogroup",
 		"description":    "Only echo tool",
 		"included_tools": []string{"everything__echo"},
@@ -33,7 +33,7 @@ func TestE2E_DevMode_ToolGroup_Create_Get_List_Delete(t *testing.T) {
 	assert.Contains(t, createResp, "streamable_http_endpoint")
 
 	// Get
-	resp = env.do(t, http.MethodGet, "/api/v0/tool-groups/echogroup", nil, "")
+	resp = env.do(t, http.MethodGet, "/api/v0/tool-collections/echogroup", nil, "")
 	defer drain(resp)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var getResp map[string]any
@@ -41,7 +41,7 @@ func TestE2E_DevMode_ToolGroup_Create_Get_List_Delete(t *testing.T) {
 	assert.Equal(t, "echogroup", getResp["name"])
 
 	// List
-	resp = env.do(t, http.MethodGet, "/api/v0/tool-groups", nil, "")
+	resp = env.do(t, http.MethodGet, "/api/v0/tool-collections", nil, "")
 	defer drain(resp)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var groups []map[string]any
@@ -50,35 +50,35 @@ func TestE2E_DevMode_ToolGroup_Create_Get_List_Delete(t *testing.T) {
 	assert.Equal(t, "echogroup", groups[0]["name"])
 
 	// Delete
-	resp = env.do(t, http.MethodDelete, "/api/v0/tool-groups/echogroup", nil, "")
+	resp = env.do(t, http.MethodDelete, "/api/v0/tool-collections/echogroup", nil, "")
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	drain(resp)
 
 	// Verify deletion
-	resp = env.do(t, http.MethodGet, "/api/v0/tool-groups/echogroup", nil, "")
+	resp = env.do(t, http.MethodGet, "/api/v0/tool-collections/echogroup", nil, "")
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	drain(resp)
 }
 
 // -----------------------------------------------------------------------
-// Dev mode – tool groups: scoped operations via the group's MCP endpoint
+// Dev mode – tool collections: scoped operations via the group's MCP endpoint
 // -----------------------------------------------------------------------
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListTools verifies that the tool
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_ListTools verifies that the tool
 // group's own MCP endpoint returns only the tools explicitly included in the
 // group, not all globally registered tools.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListTools(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_ListTools(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "scoped-tools-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	drain(resp)
 
-	c := newGroupMCPClient(t, env, "scoped-tools-group", "")
+	c := newCollectionMCPClient(t, env, "scoped-tools-group", "")
 	result, err := c.ListTools(context.Background(), mcp.ListToolsRequest{})
 	require.NoError(t, err)
 
@@ -91,21 +91,21 @@ func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListTools(t *testing.T) {
 	assert.NotContains(t, names, "everything__get-env", "group must NOT expose tools outside its scope")
 }
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetTool verifies that a specific
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_GetTool verifies that a specific
 // tool in the group can be retrieved via the group's MCP endpoint and has the
 // expected name and a non-empty description.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetTool(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_GetTool(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "get-tool-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	drain(resp)
 
-	c := newGroupMCPClient(t, env, "get-tool-group", "")
+	c := newCollectionMCPClient(t, env, "get-tool-group", "")
 	result, err := c.ListTools(context.Background(), mcp.ListToolsRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Tools, "group must expose at least one tool")
@@ -122,21 +122,21 @@ func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetTool(t *testing.T) {
 	assert.NotEmpty(t, echoTool.Description, "echo tool must have a description")
 }
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_InvokeTool verifies that a tool
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_InvokeTool verifies that a tool
 // can be called through the group's MCP endpoint and returns the expected
 // response content.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_InvokeTool(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_InvokeTool(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "invoke-tool-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	drain(resp)
 
-	c := newGroupMCPClient(t, env, "invoke-tool-group", "")
+	c := newCollectionMCPClient(t, env, "invoke-tool-group", "")
 	result, err := c.CallTool(context.Background(), mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name:      "everything__echo",
@@ -152,15 +152,15 @@ func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_InvokeTool(t *testing.T) {
 	assert.Contains(t, first.Text, "hello from group endpoint")
 }
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListPrompts verifies prompt
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_ListPrompts verifies prompt
 // listing in the context of a tool group. Prompts are not group-scoped in the
 // current implementation, so this test uses the global REST API and confirms
 // that the expected server-everything prompts are still accessible.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListPrompts(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_ListPrompts(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "prompts-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")
@@ -177,14 +177,14 @@ func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_ListPrompts(t *testing.T) {
 	assert.Contains(t, names, "everything__args-prompt")
 }
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetPrompt verifies that a prompt
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_GetPrompt verifies that a prompt
 // can be retrieved by name via the global REST API in the context of a tool
 // group setup.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetPrompt(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_GetPrompt(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "get-prompt-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")
@@ -199,14 +199,14 @@ func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_GetPrompt(t *testing.T) {
 	assert.Equal(t, "everything__simple-prompt", prompt["name"])
 }
 
-// TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_RenderPrompt verifies that
+// TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_RenderPrompt verifies that
 // prompts can be rendered with full content assertions in the context of a
 // tool group setup, mirroring the global render test.
-func TestE2E_DevMode_ToolGroup_ViaGroupEndpoint_RenderPrompt(t *testing.T) {
+func TestE2E_DevMode_ToolCollection_ViaGroupEndpoint_RenderPrompt(t *testing.T) {
 	env := setupE2EServer(t, model.ModeDev)
 	registerEverythingServer(t, env, "")
 
-	resp := env.do(t, http.MethodPost, "/api/v0/tool-groups", map[string]any{
+	resp := env.do(t, http.MethodPost, "/api/v0/tool-collections", map[string]any{
 		"name":           "render-prompt-group",
 		"included_tools": []string{"everything__echo"},
 	}, "")

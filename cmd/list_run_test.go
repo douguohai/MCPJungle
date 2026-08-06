@@ -12,16 +12,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestRunListTools_GroupUsesEffectiveToolsAPI(t *testing.T) {
+func TestRunListTools_CollectionUsesEffectiveToolsAPI(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v0/tool-groups/test-group":
-			_ = json.NewEncoder(w).Encode(types.GetToolGroupResponse{
-				ToolGroup: &types.ToolGroup{Name: "test-group", Description: "desc"},
+		case "/api/v0/tool-collections/test-collection":
+			_ = json.NewEncoder(w).Encode(types.GetToolCollectionResponse{
+				ToolCollection: &types.ToolCollection{Name: "test-collection", Description: "desc"},
 			})
-		case "/api/v0/tool-groups/test-group/effective-tools":
+		case "/api/v0/tool-collections/test-collection/effective-tools":
 			_ = json.NewEncoder(w).Encode(map[string]any{"tools": []string{"from_server", "ghost"}})
 		case "/api/v0/tools":
 			_ = json.NewEncoder(w).Encode([]*types.Tool{{Name: "from_server", Description: "ok", Enabled: true}, {Name: "other", Description: "skip", Enabled: true}})
@@ -34,16 +34,16 @@ func TestRunListTools_GroupUsesEffectiveToolsAPI(t *testing.T) {
 
 	origClient := apiClient
 	origServer := listToolsCmdServerName
-	origGroup := listToolsCmdGroupName
+	origCollection := listToolsCmdCollectionName
 	defer func() {
 		apiClient = origClient
 		listToolsCmdServerName = origServer
-		listToolsCmdGroupName = origGroup
+		listToolsCmdCollectionName = origCollection
 	}()
 
 	apiClient = client.NewClient(server.URL, "", http.DefaultClient)
 	listToolsCmdServerName = ""
-	listToolsCmdGroupName = "test-group"
+	listToolsCmdCollectionName = "test-collection"
 
 	cmd := &cobra.Command{}
 	var out bytes.Buffer
@@ -59,7 +59,7 @@ func TestRunListTools_GroupUsesEffectiveToolsAPI(t *testing.T) {
 		t.Fatalf("expected output to contain resolved tool, got: %s", output)
 	}
 	if bytes.Contains([]byte(output), []byte("other")) {
-		t.Fatalf("did not expect output to contain non-group tool, got: %s", output)
+		t.Fatalf("did not expect output to contain non-collection tool, got: %s", output)
 	}
 	if bytes.Contains([]byte(output), []byte("ghost")) {
 		t.Fatalf("did not expect output to contain non-existing tool, got: %s", output)

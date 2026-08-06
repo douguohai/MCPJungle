@@ -35,7 +35,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	mcpSvc "github.com/mcpjungle/mcpjungle/internal/service/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/service/permission"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
 	userSvc "github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -148,7 +148,7 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 	cfgSvc := configSvc.NewServerConfigService(db)
 	usrSvc := userSvc.NewUserService(db)
 	sessSvc := usersession.NewService(db)
-	tgSvc, err := toolgroup.NewToolGroupService(db, mcpService)
+	tgSvc, err := toolcollection.NewToolCollectionService(db, mcpService)
 	require.NoError(t, err)
 
 	apiServer, err := api.NewServer(&api.ServerOptions{
@@ -158,7 +158,7 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 		ConfigService:       cfgSvc,
 		DashboardService:    dashboard.NewService(db, false),
 		UserService:         usrSvc,
-		ToolGroupService:    tgSvc,
+		ToolCollectionService:    tgSvc,
 		Metrics:             telemetry.NewNoopCustomMetrics(),
 		UserSessionService:  sessSvc,
 		DeviceTokenService:  devicetoken.NewService(db),
@@ -295,10 +295,10 @@ func newMCPProxyClient(t *testing.T, env *e2eEnv, clientToken string) *client.Cl
 	return c
 }
 
-// newGroupMCPClient creates an initialized StreamableHTTP MCP client that
-// connects directly to a tool group's own MCP endpoint at /v0/groups/:name/mcp.
-// This endpoint exposes ONLY the tools registered for that group.
-func newGroupMCPClient(t *testing.T, env *e2eEnv, groupName string, token string) *client.Client {
+// newCollectionMCPClient creates an initialized StreamableHTTP MCP client that
+// connects directly to a tool collection's own MCP endpoint at /v0/collections/:name/mcp.
+// This endpoint exposes ONLY the tools registered for that collection.
+func newCollectionMCPClient(t *testing.T, env *e2eEnv, collectionName string, token string) *client.Client {
 	t.Helper()
 	opts := []transport.StreamableHTTPCOption{}
 	if token != "" {
@@ -307,7 +307,7 @@ func newGroupMCPClient(t *testing.T, env *e2eEnv, groupName string, token string
 		}))
 	}
 	c, err := client.NewStreamableHttpClient(
-		env.baseURL+"/v0/groups/"+groupName+"/mcp",
+		env.baseURL+"/v0/collections/"+collectionName+"/mcp",
 		opts...,
 	)
 	require.NoError(t, err)

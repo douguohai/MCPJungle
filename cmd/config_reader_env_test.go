@@ -11,7 +11,7 @@ func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 	t.Setenv("MCPJ_TEST_SERVER_TOKEN", "server-token")
 	t.Setenv("MCPJ_TEST_ALLOW_SERVER", "affine-main")
 	t.Setenv("MCPJ_TEST_USER_NAME", "alice")
-	t.Setenv("MCPJ_TEST_GROUP_NAME", "shared-tools")
+	t.Setenv("MCPJ_TEST_COLLECTION_NAME", "shared-tools")
 
 	tempDir := t.TempDir()
 
@@ -28,13 +28,13 @@ func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 		t.Fatalf("failed to write server config: %v", err)
 	}
 
-	groupPath := filepath.Join(tempDir, "group.json")
-	if err := os.WriteFile(groupPath, []byte(`{
-		"name": "${MCPJ_TEST_GROUP_NAME}",
+	collectionPath := filepath.Join(tempDir, "collection.json")
+	if err := os.WriteFile(collectionPath, []byte(`{
+		"name": "${MCPJ_TEST_COLLECTION_NAME}",
 		"included_servers": ["${MCPJ_TEST_ALLOW_SERVER}"],
 		"description": "tools-for-${MCPJ_TEST_USER_NAME}"
 	}`), 0o600); err != nil {
-		t.Fatalf("failed to write group config: %v", err)
+		t.Fatalf("failed to write collection config: %v", err)
 	}
 
 	serverCfg, err := readMcpServerConfig(serverPath)
@@ -51,17 +51,17 @@ func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 		t.Fatalf("expected resolved server header, got %q", serverCfg.Headers["Authorization"])
 	}
 
-	groupCfg, err := readToolGroupConfig(groupPath)
+	collectionCfg, err := readToolCollectionConfig(collectionPath)
 	if err != nil {
-		t.Fatalf("unexpected error reading group config: %v", err)
+		t.Fatalf("unexpected error reading collection config: %v", err)
 	}
-	if groupCfg.Name != "shared-tools" {
-		t.Fatalf("expected resolved group name, got %q", groupCfg.Name)
+	if collectionCfg.Name != "shared-tools" {
+		t.Fatalf("expected resolved collection name, got %q", collectionCfg.Name)
 	}
-	if groupCfg.IncludedServers[0] != "affine-main" {
-		t.Fatalf("expected resolved included server, got %q", groupCfg.IncludedServers[0])
+	if collectionCfg.IncludedServers[0] != "affine-main" {
+		t.Fatalf("expected resolved included server, got %q", collectionCfg.IncludedServers[0])
 	}
-	if groupCfg.Description != "tools-for-alice" {
-		t.Fatalf("expected resolved group description, got %q", groupCfg.Description)
+	if collectionCfg.Description != "tools-for-alice" {
+		t.Fatalf("expected resolved collection description, got %q", collectionCfg.Description)
 	}
 }

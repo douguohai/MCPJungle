@@ -16,48 +16,48 @@ var updateCmd = &cobra.Command{
 	},
 }
 
-var updateToolGroupCmd = &cobra.Command{
-	Use:   "group",
-	Short: "Update a tool group",
-	Long: "Update an existing Tool Group\n" +
-		"This option allows you to supply the modified configuration file of an existing Tool group.\n" +
+var updateToolCollectionCmd = &cobra.Command{
+	Use:   "collection",
+	Short: "Update a tool collection",
+	Long: "Update an existing Tool Collection\n" +
+		"This option allows you to supply the modified configuration file of an existing Tool Collection.\n" +
 		"The new configuration completely overrides the existing one.\n" +
-		"Note that you cannot update the name of a group once it is created.\n" +
-		"Updating a group does not cause any downtime for the MCP clients relying on its endpoint.\n\n" +
+		"Note that you cannot update the name of a collection once it is created.\n" +
+		"Updating a collection does not cause any downtime for the MCP clients relying on its endpoint.\n\n" +
 		"CAUTION: If you remove any tools from the configuration (by removing them from include or adding them to exclude), " +
-		"calling update will immediately remove them from the group. " +
-		"They will no longer be accessible by MCP clients using the group's MCP server.",
-	RunE: runUpdateGroup,
+		"calling update will immediately remove them from the collection. " +
+		"They will no longer be accessible by MCP clients using the collection's MCP server.",
+	RunE: runUpdateCollection,
 }
 
 var (
-	updateToolGroupConfigFilePath string
+	updateToolCollectionConfigFilePath string
 )
 
 func init() {
-	updateToolGroupCmd.Flags().StringVarP(
-		&updateToolGroupConfigFilePath,
+	updateToolCollectionCmd.Flags().StringVarP(
+		&updateToolCollectionConfigFilePath,
 		"conf",
 		"c",
 		"",
-		"Path to new JSON configuration file for the Tool Group",
+		"Path to new JSON configuration file for the Tool Collection",
 	)
-	_ = updateToolGroupCmd.MarkFlagRequired("conf")
+	_ = updateToolCollectionCmd.MarkFlagRequired("conf")
 
-	updateCmd.AddCommand(updateToolGroupCmd)
+	updateCmd.AddCommand(updateToolCollectionCmd)
 
 	rootCmd.AddCommand(updateCmd)
 }
 
-func runUpdateGroup(cmd *cobra.Command, args []string) error {
-	updatedConf, err := readToolGroupConfig(updateToolGroupConfigFilePath)
+func runUpdateCollection(cmd *cobra.Command, args []string) error {
+	updatedConf, err := readToolCollectionConfig(updateToolCollectionConfigFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file %s: %w", updateToolGroupConfigFilePath, err)
+		return fmt.Errorf("failed to read config file %s: %w", updateToolCollectionConfigFilePath, err)
 	}
 
-	resp, err := apiClient.UpdateToolGroup(updatedConf)
+	resp, err := apiClient.UpdateToolCollection(updatedConf)
 	if err != nil {
-		return fmt.Errorf("failed to update tool group %s: %w", updatedConf.Name, err)
+		return fmt.Errorf("failed to update tool collection %s: %w", updatedConf.Name, err)
 	}
 
 	// Check if anything was actually changed
@@ -70,11 +70,11 @@ func runUpdateGroup(cmd *cobra.Command, args []string) error {
 	noChangeInExcluded := len(excludedAdded) == 0 && len(excludedRemoved) == 0
 
 	if resp.Old.Description == resp.New.Description && noChangeInTools && noChangeInServers && noChangeInExcluded {
-		cmd.Printf("No changes detected for Tool Group %s. Nothing was updated.\n", resp.Name)
+		cmd.Printf("No changes detected for Tool Collection %s. Nothing was updated.\n", resp.Name)
 		return nil
 	}
 
-	cmd.Printf("Tool Group %s updated successfully\n\n", resp.Name)
+	cmd.Printf("Tool Collection %s updated successfully\n\n", resp.Name)
 
 	if resp.Old.Description != resp.New.Description {
 		cmd.Printf("* Description updated from:\n    %s\nto:\n    %s\n\n", resp.Old.Description, resp.New.Description)

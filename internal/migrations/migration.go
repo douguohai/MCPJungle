@@ -21,7 +21,7 @@ func Migrate(db *gorm.DB) error {
 		&model.PermissionGroup{},
 		&model.PermissionGroupMember{},
 		&model.PermissionGroupService{},
-		&model.ToolGroup{},
+		&model.ToolCollection{},
 		&model.Prompt{},
 		&model.Resource{},
 		&model.UpstreamOAuthPendingSession{},

@@ -37,25 +37,25 @@ func TestCreateUserSubcommand(t *testing.T) {
 	testhelpers.AssertNotNil(t, createUserCmd.Args)
 }
 
-func TestCreateToolGroupSubcommand(t *testing.T) {
+func TestCreateToolCollectionSubcommand(t *testing.T) {
 	// Test command properties
-	testhelpers.AssertEqual(t, "group --conf <file>", createToolGroupCmd.Use)
-	testhelpers.AssertEqual(t, "Create a Group of MCP Tools", createToolGroupCmd.Short)
-	testhelpers.AssertNotNil(t, createToolGroupCmd.Long)
-	testhelpers.AssertTrue(t, len(createToolGroupCmd.Long) > 0, "Long description should not be empty")
+	testhelpers.AssertEqual(t, "collection --conf <file>", createToolCollectionCmd.Use)
+	testhelpers.AssertEqual(t, "Create a Collection of MCP Tools", createToolCollectionCmd.Short)
+	testhelpers.AssertNotNil(t, createToolCollectionCmd.Long)
+	testhelpers.AssertTrue(t, len(createToolCollectionCmd.Long) > 0, "Long description should not be empty")
 
 	// Test command functions
-	testhelpers.AssertNotNil(t, createToolGroupCmd.RunE)
+	testhelpers.AssertNotNil(t, createToolCollectionCmd.RunE)
 
 	// Test command flags
-	confFlag := createToolGroupCmd.Flags().Lookup("conf")
+	confFlag := createToolCollectionCmd.Flags().Lookup("conf")
 	testhelpers.AssertNotNil(t, confFlag)
 	testhelpers.AssertTrue(t, len(confFlag.Usage) > 0, "Conf flag should have usage description")
 }
 
 func TestCreateCommandVariables(t *testing.T) {
 	// Test that command variables are properly initialized to empty values
-	testhelpers.AssertEqual(t, "", createToolGroupConfigFilePath)
+	testhelpers.AssertEqual(t, "", createToolCollectionConfigFilePath)
 }
 
 // Integration tests for create commands
@@ -65,7 +65,7 @@ func TestCreateCommandIntegration(t *testing.T) {
 
 	// Test all create subcommands are properly configured
 	subcommands := createCmd.Commands()
-	expectedSubcommands := []string{"user", "device-token", "group"}
+	expectedSubcommands := []string{"user", "device-token", "collection"}
 
 	testhelpers.AssertEqual(t, len(expectedSubcommands), len(subcommands))
 

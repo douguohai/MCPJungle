@@ -345,7 +345,7 @@ func SetupTestDB(t *testing.T) *TestDBSetup {
 		&model.McpServer{},
 		&model.Tool{},
 		&model.ServerConfig{},
-		&model.ToolGroup{},
+		&model.ToolCollection{},
 		&model.Prompt{},
 		&model.Resource{},
 		&model.UpstreamOAuthPendingSession{},

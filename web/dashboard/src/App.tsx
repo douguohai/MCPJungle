@@ -10,7 +10,7 @@ import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
 import ServersPage from "./pages/ServersPage";
 import ToolsPage from "./pages/ToolsPage";
-import ToolGroupsPage from "./pages/ToolGroupsPage";
+import ToolCollectionsPage from "./pages/ToolCollectionsPage";
 import PromptsPage from "./pages/PromptsPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
@@ -74,7 +74,7 @@ export default function App() {
         <Route index element={<OverviewPage />} />
         <Route path="servers" element={<ServersPage />} />
         <Route path="tools" element={<ToolsPage />} />
-        <Route path="tool-groups" element={<ToolGroupsPage />} />
+        <Route path="tool-collections" element={<ToolCollectionsPage />} />
         <Route path="prompts" element={<PromptsPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />

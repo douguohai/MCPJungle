@@ -46,7 +46,7 @@ func TestE2E_EnterpriseMode_RegularUser_CannotWrite(t *testing.T) {
 		body         any
 	}{
 		{http.MethodPost, "/api/v0/servers", map[string]any{"name": "x", "transport": "stdio", "command": "echo"}},
-		{http.MethodPost, "/api/v0/tool-groups", map[string]any{"name": "g"}},
+		{http.MethodPost, "/api/v0/tool-collections", map[string]any{"name": "g"}},
 		{http.MethodPost, "/api/v0/users", map[string]any{"username": "u"}},
 	}
 	for _, op := range writeOps {

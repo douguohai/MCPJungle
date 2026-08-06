@@ -14,27 +14,27 @@ type ToolResolver interface {
 	ListToolsByServer(serverName string) ([]Tool, error)
 }
 
-// ToolGroup represents a group of tools.
+// ToolCollection represents a collection of tools.
 // It is useful when the user wants to expose only a subset of all tools to MCP clients.
-type ToolGroup struct {
+type ToolCollection struct {
 	gorm.Model
 
 	Name        string `json:"name" gorm:"unique; not null;type:varchar(255)"`
 	Description string `json:"description"`
 
-	// IncludedTools contains a list of tool names that are included in this group.
+	// IncludedTools contains a list of tool names that are included in this collection.
 	// storing the list of tool names as a JSON array is a convenient way for now.
 	IncludedTools datatypes.JSON `json:"included_tools"`
 
 	// IncludedServers contains a list of MCP server names. All tools from these servers will be included.
 	IncludedServers datatypes.JSON `json:"included_servers"`
 
-	// ExcludedTools contains a list of tool names to exclude from the group.
+	// ExcludedTools contains a list of tool names to exclude from the collection.
 	ExcludedTools datatypes.JSON `json:"excluded_tools"`
 }
 
 // GetTools unmarshals the IncludedTools JSON array into a slice of strings.
-func (g *ToolGroup) GetTools() ([]string, error) {
+func (g *ToolCollection) GetTools() ([]string, error) {
 	if g.IncludedTools == nil {
 		return []string{}, nil
 	}
@@ -44,7 +44,7 @@ func (g *ToolGroup) GetTools() ([]string, error) {
 }
 
 // GetServers unmarshals the IncludedServers JSON array into a slice of strings.
-func (g *ToolGroup) GetServers() ([]string, error) {
+func (g *ToolCollection) GetServers() ([]string, error) {
 	if g.IncludedServers == nil {
 		return []string{}, nil
 	}
@@ -54,7 +54,7 @@ func (g *ToolGroup) GetServers() ([]string, error) {
 }
 
 // GetExcludedTools unmarshals the ExcludedTools JSON array into a slice of strings.
-func (g *ToolGroup) GetExcludedTools() ([]string, error) {
+func (g *ToolCollection) GetExcludedTools() ([]string, error) {
 	if g.ExcludedTools == nil {
 		return []string{}, nil
 	}
@@ -63,12 +63,12 @@ func (g *ToolGroup) GetExcludedTools() ([]string, error) {
 	return tools, err
 }
 
-// ResolveEffectiveTools resolves all effective tools for this group by combining
+// ResolveEffectiveTools resolves all effective tools for this collection by combining
 // included_tools, included_servers, and applying excluded_tools.
 // Note that tool exclusions are applied at last, so if a tool is both included and excluded,
 // it will be excluded.
 // It requires an MCP service to lookup tools by server.
-func (g *ToolGroup) ResolveEffectiveTools(mcpService ToolResolver) ([]string, error) {
+func (g *ToolCollection) ResolveEffectiveTools(mcpService ToolResolver) ([]string, error) {
 	effectiveTools := make(map[string]bool)
 
 	// Add tools from included_tools

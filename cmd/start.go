@@ -24,7 +24,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
+	"github.com/mcpjungle/mcpjungle/internal/service/toolcollection"
 	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	"github.com/mcpjungle/mcpjungle/internal/service/permission"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
@@ -447,9 +447,9 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 	userService := user.NewUserService(dbConn)
 	dashboardService := dashboard.NewService(dbConn, otelProviders.IsEnabled())
 
-	toolGroupService, err := toolgroup.NewToolGroupService(dbConn, mcpService)
+	toolCollectionService, err := toolcollection.NewToolCollectionService(dbConn, mcpService)
 	if err != nil {
-		return fmt.Errorf("failed to create Tool Group service: %v", err)
+		return fmt.Errorf("failed to create Tool Collection service: %v", err)
 	}
 
 	userSessionService := usersession.NewService(dbConn)
@@ -463,7 +463,7 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		MCPService:        mcpService,
 		ConfigService:     configService,
 		UserService:       userService,
-		ToolGroupService:  toolGroupService,
+		ToolCollectionService: toolCollectionService,
 		DashboardService:  dashboardService,
 		OtelProviders:     otelProviders,
 		Metrics:           mcpMetrics,

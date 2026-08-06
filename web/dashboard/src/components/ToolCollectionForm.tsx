@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, Form, Input, Select, message } from "antd";
-import { toolGroupsApi } from "../api/toolGroups";
+import { toolCollectionsApi } from "../api/toolCollections";
 import { extractError } from "../api/client";
 import type { DashboardTool } from "../types";
 
@@ -12,7 +12,7 @@ interface Props {
   tools: DashboardTool[];
 }
 
-export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props) {
+export default function ToolCollectionForm({ open, onClose, onCreated, tools }: Props) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -31,12 +31,12 @@ export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props
     }
     setLoading(true);
     try {
-      await toolGroupsApi.create({
+      await toolCollectionsApi.create({
         name: values.name as string,
         description: (values.description as string) || undefined,
         tools: (values.tools as string[]) ?? [],
       });
-      message.success(`已创建工具组 ${values.name as string}`);
+      message.success(`已创建工具集合 ${values.name as string}`);
       onCreated();
       onClose();
     } catch (e) {
@@ -48,7 +48,7 @@ export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props
 
   return (
     <Modal
-      title="添加工具组"
+      title="添加工具集合"
       open={open}
       onCancel={onClose}
       onOk={onSubmit}
@@ -58,7 +58,7 @@ export default function ToolGroupForm({ open, onClose, onCreated, tools }: Props
       destroyOnClose
     >
       <Form form={form} layout="vertical">
-        <Form.Item name="name" label="组名" rules={[{ required: true, message: "请输入组名" }]}>
+        <Form.Item name="name" label="集合名" rules={[{ required: true, message: "请输入集合名" }]}>
           <Input />
         </Form.Item>
         <Form.Item name="description" label="描述">

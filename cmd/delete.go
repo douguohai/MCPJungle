@@ -24,16 +24,16 @@ var deleteUserCmd = &cobra.Command{
 	RunE:  runDeleteUser,
 }
 
-var deleteToolGroupCmd = &cobra.Command{
-	Use:   "group [name]",
+var deleteToolCollectionCmd = &cobra.Command{
+	Use:   "collection [name]",
 	Args:  cobra.ExactArgs(1),
-	Short: "Delete a tool group",
-	Long: "Delete a tool group from mcpjungle.\n" +
-		"Once you delete a group, its endpoint is no longer available.\n" +
-		"So make sure no MCP clients are relying on the endpoint before you delete a group.\n" +
-		"NOTE: This command only deletes the group itself, not the tools included in it.\n" +
+	Short: "Delete a tool collection",
+	Long: "Delete a tool collection from mcpjungle.\n" +
+		"Once you delete a collection, its endpoint is no longer available.\n" +
+		"So make sure no MCP clients are relying on the endpoint before you delete a collection.\n" +
+		"NOTE: This command only deletes the collection itself, not the tools included in it.\n" +
 		"Tools are only deleted when you deregister a MCP server from mcpjungle.",
-	RunE: runDeleteToolGroup,
+	RunE: runDeleteToolCollection,
 }
 
 var deleteDeviceTokenCmd = &cobra.Command{
@@ -47,7 +47,7 @@ var deleteDeviceTokenCmd = &cobra.Command{
 func init() {
 	deleteCmd.AddCommand(deleteUserCmd)
 	deleteCmd.AddCommand(deleteDeviceTokenCmd)
-	deleteCmd.AddCommand(deleteToolGroupCmd)
+	deleteCmd.AddCommand(deleteToolCollectionCmd)
 
 	rootCmd.AddCommand(deleteCmd)
 }
@@ -61,12 +61,12 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runDeleteToolGroup(cmd *cobra.Command, args []string) error {
+func runDeleteToolCollection(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	if err := apiClient.DeleteToolGroup(name); err != nil {
-		return fmt.Errorf("failed to delete the tool group: %w", err)
+	if err := apiClient.DeleteToolCollection(name); err != nil {
+		return fmt.Errorf("failed to delete the tool collection: %w", err)
 	}
-	cmd.Printf("Tool group '%s' deleted successfully!\n", name)
+	cmd.Printf("Tool collection '%s' deleted successfully!\n", name)
 	return nil
 }
 
