@@ -8,7 +8,7 @@ import (
 
 func TestLoginCommandStructure(t *testing.T) {
 	t.Run("command_properties", func(t *testing.T) {
-		testhelpers.AssertEqual(t, "login [access_token]", loginCmd.Use)
+		testhelpers.AssertEqual(t, "login [token]", loginCmd.Use)
 		testhelpers.AssertEqual(t, "Log in to MCPJungle (Enterprise mode)", loginCmd.Short)
 	})
 

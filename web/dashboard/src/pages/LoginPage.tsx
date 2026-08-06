@@ -3,7 +3,7 @@ import { Card, Input, Button, message, Typography, Form } from "antd";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api/auth";
 import { extractError } from "../api/client";
-import { setToken, setUser } from "../store/auth";
+import { setUser } from "../store/auth";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -13,7 +13,6 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(values.username.trim(), values.password);
-      setToken(res.token);
       setUser({ username: res.user.username, role: res.user.role });
       message.success("登录成功");
       nav("/", { replace: true });

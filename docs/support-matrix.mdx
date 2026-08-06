@@ -47,8 +47,7 @@ Use it as a quick product-readiness view:
 | Local deployment | Development mode | Stable | Intended for individuals using Mcpjungle locally. |
 | Shared deployment | Enterprise mode | Stable | Intended for teams and shared infrastructure. |
 | Distribution | Runtime platforms | Stable | Pre-built binaries are published for macOS, Linux, and Windows on AMD64 and ARM64 on the [GitHub Releases page](https://github.com/mcpjungle/MCPJungle/releases). Container images are published for AMD64 and ARM64 on [GHCR](https://ghcr.io/mcpjungle/mcpjungle). |
-| Database | SQLite | Stable | Good default for local testing and single-user workflows. |
-| Database | PostgreSQL | Stable | Recommended for serious and shared deployments. |
+| Database | MySQL 8.0 | Stable | Required for all deployments, local and shared. |
 | Session lifecycle | Stateless sessions | Stable | Default and preferred mode. |
 | Session lifecycle | Stateful sessions | Stable | Supported for cold-start-sensitive or sessionful upstream servers. |
 

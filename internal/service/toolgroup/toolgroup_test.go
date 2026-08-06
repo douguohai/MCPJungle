@@ -142,7 +142,7 @@ func TestValidGroupNameConsistency(t *testing.T) {
 
 func setupInMemoryDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	if err != nil {
 		t.Fatalf("failed to open in-memory db: %v", err)
 	}

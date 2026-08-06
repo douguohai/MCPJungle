@@ -17,7 +17,8 @@ import {
   BarChartOutlined,
 } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { clearToken, getUser } from "../store/auth";
+import { clearUser, getUser } from "../store/auth";
+import { http } from "../api/client";
 import { overviewApi } from "../api/overview";
 
 const { Header, Sider, Content } = Layout;
@@ -35,7 +36,7 @@ const baseMenuItems = [
 // Management pages (MCP clients / users / tokens) only make sense in enterprise
 // mode — dev mode has no auth concepts and the backing /v0 endpoints return 403.
 const adminMenuItems = [
-  { key: "/clients", icon: <DesktopOutlined />, label: "MCP 客户端" },
+  { key: "/device-tokens", icon: <DesktopOutlined />, label: "设备令牌" },
   { key: "/users", icon: <TeamOutlined />, label: "用户" },
   { key: "/stats", icon: <BarChartOutlined />, label: "调用统计" },
 ];
@@ -57,8 +58,9 @@ export default function DashboardLayout() {
 
   const items = mode === "development" ? baseMenuItems : [...baseMenuItems, ...adminMenuItems];
 
-  const onLogout = () => {
-    clearToken();
+  const onLogout = async () => {
+    try { await http.post("/auth/logout"); } catch {}
+    clearUser();
     nav("/login", { replace: true });
   };
 

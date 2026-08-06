@@ -10,12 +10,12 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"gorm.io/gorm"
 )
 
 func setupTestDBWithPrompts(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.Prompt{}, &model.Resource{})

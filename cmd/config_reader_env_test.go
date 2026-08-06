@@ -9,7 +9,6 @@ import (
 func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 	t.Setenv("MCPJ_TEST_SERVER_ID", "workspace-123")
 	t.Setenv("MCPJ_TEST_SERVER_TOKEN", "server-token")
-	t.Setenv("MCPJ_TEST_CLIENT_NAME", "desktop-client")
 	t.Setenv("MCPJ_TEST_ALLOW_SERVER", "affine-main")
 	t.Setenv("MCPJ_TEST_USER_NAME", "alice")
 	t.Setenv("MCPJ_TEST_GROUP_NAME", "shared-tools")
@@ -27,28 +26,6 @@ func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 		}
 	}`), 0o600); err != nil {
 		t.Fatalf("failed to write server config: %v", err)
-	}
-
-	clientPath := filepath.Join(tempDir, "client.json")
-	if err := os.WriteFile(clientPath, []byte(`{
-		"name": "${MCPJ_TEST_CLIENT_NAME}",
-		"description": "client-for-${MCPJ_TEST_ALLOW_SERVER}",
-		"allowed_servers": ["${MCPJ_TEST_ALLOW_SERVER}"],
-		"access_token_ref": {
-			"env": "MCPJ_${MCPJ_TEST_CLIENT_NAME}"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("failed to write client config: %v", err)
-	}
-
-	userPath := filepath.Join(tempDir, "user.json")
-	if err := os.WriteFile(userPath, []byte(`{
-		"name": "${MCPJ_TEST_USER_NAME}",
-		"access_token_ref": {
-			"env": "TOKEN_${MCPJ_TEST_USER_NAME}"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("failed to write user config: %v", err)
 	}
 
 	groupPath := filepath.Join(tempDir, "group.json")
@@ -72,34 +49,6 @@ func TestReadConfigFilesResolveEnvironmentVariables(t *testing.T) {
 	}
 	if serverCfg.Headers["Authorization"] != "Bearer server-token" {
 		t.Fatalf("expected resolved server header, got %q", serverCfg.Headers["Authorization"])
-	}
-
-	clientCfg, err := readMcpClientConfig(clientPath)
-	if err != nil {
-		t.Fatalf("unexpected error reading client config: %v", err)
-	}
-	if clientCfg.Name != "desktop-client" {
-		t.Fatalf("expected resolved client name, got %q", clientCfg.Name)
-	}
-	if clientCfg.Description != "client-for-affine-main" {
-		t.Fatalf("expected resolved client description, got %q", clientCfg.Description)
-	}
-	if clientCfg.AllowMcpServers[0] != "affine-main" {
-		t.Fatalf("expected resolved allowed server, got %q", clientCfg.AllowMcpServers[0])
-	}
-	if clientCfg.AccessTokenRef.Env != "MCPJ_desktop-client" {
-		t.Fatalf("expected resolved access token ref env, got %q", clientCfg.AccessTokenRef.Env)
-	}
-
-	userCfg, err := readUserConfig(userPath)
-	if err != nil {
-		t.Fatalf("unexpected error reading user config: %v", err)
-	}
-	if userCfg.Username != "alice" {
-		t.Fatalf("expected resolved username, got %q", userCfg.Username)
-	}
-	if userCfg.AccessTokenRef.Env != "TOKEN_alice" {
-		t.Fatalf("expected resolved user token ref env, got %q", userCfg.AccessTokenRef.Env)
 	}
 
 	groupCfg, err := readToolGroupConfig(groupPath)

@@ -46,17 +46,6 @@ func TestListServersSubcommand(t *testing.T) {
 	testhelpers.AssertNotNil(t, listServersCmd.RunE)
 }
 
-func TestListMcpClientsSubcommand(t *testing.T) {
-	// Test command properties
-	testhelpers.AssertEqual(t, "mcp-clients", listMcpClientsCmd.Use)
-	testhelpers.AssertEqual(t, "List MCP clients (Enterprise mode)", listMcpClientsCmd.Short)
-	testhelpers.AssertNotNil(t, listMcpClientsCmd.Long)
-	testhelpers.AssertTrue(t, len(listMcpClientsCmd.Long) > 0, "Long description should not be empty")
-
-	// Test command functions
-	testhelpers.AssertNotNil(t, listMcpClientsCmd.RunE)
-}
-
 func TestListUsersSubcommand(t *testing.T) {
 	// Test command properties
 	testhelpers.AssertEqual(t, "users", listUsersCmd.Use)
@@ -113,7 +102,7 @@ func TestListCommandIntegration(t *testing.T) {
 
 	// Test all list subcommands are properly configured
 	subcommands := listCmd.Commands()
-	expectedSubcommands := []string{"tools", "prompts", "resources", "servers", "mcp-clients", "users", "groups"}
+	expectedSubcommands := []string{"tools", "prompts", "resources", "servers", "users", "groups", "device-tokens"}
 
 	testhelpers.AssertEqual(t, len(expectedSubcommands), len(subcommands))
 

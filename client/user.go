@@ -64,37 +64,6 @@ func (c *Client) DeleteUser(username string) error {
 	return nil
 }
 
-func (c *Client) UpdateUser(user *types.CreateOrUpdateUserRequest) (*types.CreateOrUpdateUserResponse, error) {
-	u, _ := c.constructAPIEndpoint("/users/" + user.Username)
-
-	body, err := json.Marshal(user)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := c.newRequest(http.MethodPut, u, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request to %s: %w", u, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request to %s: %w", u, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
-	}
-
-	var updateResp types.CreateOrUpdateUserResponse
-	if err := json.NewDecoder(resp.Body).Decode(&updateResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-	return &updateResp, nil
-}
-
 // ListUsers sends a request to list all users in mcpjungle
 func (c *Client) ListUsers() ([]*types.User, error) {
 	u, _ := c.constructAPIEndpoint("/users")
@@ -148,8 +117,10 @@ func (c *Client) Whoami(accessToken string) (*types.User, error) {
 	return &user, nil
 }
 
-// Login authenticates with username+password and returns a short-lived session
-// JWT. Unlike the /v0 endpoints, login lives under /api/dashboard/auth.
+// Login authenticates with username+password and returns the web session id.
+// The server sets it as an HttpOnly Set-Cookie; CLI clients extract the value
+// and replay it as Authorization: Bearer on later calls. (Login lives under
+// /api/dashboard/auth, outside the /v0 prefix.)
 func (c *Client) Login(username, password string) (string, error) {
 	u, _ := url.JoinPath(c.baseURL, "/api/dashboard/auth/login")
 	payload := struct {
@@ -171,14 +142,10 @@ func (c *Client) Login(username, password string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", c.parseErrorResponse(resp)
 	}
-	var loginResp struct {
-		Token string `json:"token"`
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "mcpjungle_session" {
+			return ck.Value, nil
+		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
-	}
-	if loginResp.Token == "" {
-		return "", fmt.Errorf("server did not return a session token")
-	}
-	return loginResp.Token, nil
+	return "", fmt.Errorf("server did not set a session cookie")
 }

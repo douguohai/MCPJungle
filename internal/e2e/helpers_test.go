@@ -1,8 +1,8 @@
 // Package e2e contains end-to-end integration tests for MCPJungle against
 // @modelcontextprotocol/server-everything.
 //
-// Tests spin up a full MCPJungle HTTP server backed by an in-memory SQLite
-// database, register server-everything as a stdio upstream, then exercise every
+// Tests spin up a full MCPJungle HTTP server backed by a MySQL test database,
+// register server-everything as a stdio upstream, then exercise every
 // major API surface:
 //   - Global tools: list, get, invoke
 //   - Global prompts: list, get, render (simple and complex)
@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -32,12 +33,12 @@ import (
 	configSvc "github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	mcpSvc "github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	userSvc "github.com/mcpjungle/mcpjungle/internal/service/user"
+	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"gorm.io/gorm"
 )
 
@@ -108,8 +109,8 @@ func decodeJSON(t *testing.T, r *http.Response, target any) {
 	require.NoError(t, json.NewDecoder(r.Body).Decode(target))
 }
 
-// setupE2EServer spins up a full MCPJungle HTTP server backed by an in-memory
-// SQLite DB, initialised in the requested mode.
+// setupE2EServer spins up a full MCPJungle HTTP server backed by a MySQL test
+// database, initialised in the requested mode.
 // In enterprise mode, env.adminToken and env.userToken are set.
 // The server is shut down via t.Cleanup.
 func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
@@ -118,7 +119,7 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 		t.Skip("npx not found in PATH – skipping server-everything end-to-end tests")
 	}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 	require.NoError(t, migrations.Migrate(db))
 
@@ -144,19 +145,20 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 
 	cfgSvc := configSvc.NewServerConfigService(db)
 	usrSvc := userSvc.NewUserService(db)
+	sessSvc := usersession.NewService(db)
 	tgSvc, err := toolgroup.NewToolGroupService(db, mcpService)
 	require.NoError(t, err)
 
 	apiServer, err := api.NewServer(&api.ServerOptions{
-		MCPProxyServer:    mcpProxy,
-		SseMcpProxyServer: sseMcpProxy,
-		MCPService:        mcpService,
-		MCPClientService:  mcpclient.NewMCPClientService(db),
-		ConfigService:     cfgSvc,
-		DashboardService:  dashboard.NewService(db, false),
-		UserService:       usrSvc,
-		ToolGroupService:  tgSvc,
-		Metrics:           telemetry.NewNoopCustomMetrics(),
+		MCPProxyServer:     mcpProxy,
+		SseMcpProxyServer:  sseMcpProxy,
+		MCPService:         mcpService,
+		ConfigService:      cfgSvc,
+		DashboardService:   dashboard.NewService(db, false),
+		UserService:        usrSvc,
+		ToolGroupService:   tgSvc,
+		Metrics:            telemetry.NewNoopCustomMetrics(),
+		UserSessionService: sessSvc,
 	})
 	require.NoError(t, err)
 
@@ -168,16 +170,17 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 	case model.ModeEnterprise:
 		_, err = cfgSvc.Init(model.ModeEnterprise)
 		require.NoError(t, err)
-		_, err = usrSvc.CreateAdminUser("admin", "test-password")
+		adminUser, err := usrSvc.CreateAdminUser("admin", "test-password")
 		require.NoError(t, err)
-		// e2e drives the legacy access-token fallback path of the auth
-		// middleware; assign a known token to the admin for that purpose.
-		adminUser, err := usrSvc.UpdateUser(&model.User{Username: "admin", AccessToken: "e2e-admin-token-123"})
+		// Create a session for the admin user.
+		adminRawSess, _, err := sessSvc.Create(adminUser.ID, "", "", 1*time.Hour)
 		require.NoError(t, err)
-		env.adminToken = adminUser.AccessToken
+		env.adminToken = adminRawSess
 		regularUser, err := usrSvc.CreateUser(&model.User{Username: "regularuser"})
 		require.NoError(t, err)
-		env.userToken = regularUser.AccessToken
+		regularRawSess, _, err := sessSvc.Create(regularUser.ID, "", "", 1*time.Hour)
+		require.NoError(t, err)
+		env.userToken = regularRawSess
 	default:
 		t.Fatalf("unsupported server mode: %s", mode)
 	}

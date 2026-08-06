@@ -15,13 +15,12 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 )
 
 func TestPromptsIntegration(t *testing.T) {
 	// Setup test database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = migrations.Migrate(db)
@@ -121,7 +120,7 @@ func TestPromptsIntegration(t *testing.T) {
 }
 
 func TestResourcesIntegration(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = migrations.Migrate(db)

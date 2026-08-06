@@ -10,15 +10,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/mcpjungle/mcpjungle/internal/auth"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
+	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/mcpjungle/mcpjungle/pkg/version"
@@ -43,7 +44,6 @@ type ServerOptions struct {
 	SseMcpProxyServer *server.MCPServer
 
 	MCPService       *mcp.MCPService
-	MCPClientService *mcpclient.McpClientService
 	ConfigService    *config.ServerConfigService
 	UserService      *user.UserService
 	ToolGroupService *toolgroup.ToolGroupService
@@ -52,8 +52,12 @@ type ServerOptions struct {
 	OtelProviders *telemetry.Providers
 	Metrics       telemetry.CustomMetrics
 
-	// AuthSigner signs and verifies user session JWTs.
-	AuthSigner *auth.Signer
+	// UserSessionService manages web dashboard sessions (cookie-based auth).
+	UserSessionService *usersession.Service
+
+	// PermissionService manages permission groups and user effective services.
+	PermissionService *permission.Service
+	DeviceTokenService *devicetoken.Service
 }
 
 // Server represents the MCPJungle registry server that handles MCP proxy and API requests
@@ -64,7 +68,6 @@ type Server struct {
 	sseMcpProxyServer *server.MCPServer
 
 	mcpService       *mcp.MCPService
-	mcpClientService *mcpclient.McpClientService
 
 	configService    *config.ServerConfigService
 	userService      *user.UserService
@@ -74,7 +77,9 @@ type Server struct {
 	otelProviders *telemetry.Providers
 	metrics       telemetry.CustomMetrics
 
-	authSigner *auth.Signer
+	userSessionService *usersession.Service
+	permissionService  *permission.Service
+	deviceTokenService  *devicetoken.Service
 
 	// groupMcpServers keeps track of mcp-go's server.SSEServer instances created for each tool group.
 	// These instances serve the requests made to tool groups' SSE tools.
@@ -108,14 +113,15 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		mcpProxyServer:        opts.MCPProxyServer,
 		sseMcpProxyServer:     opts.SseMcpProxyServer,
 		mcpService:            opts.MCPService,
-		mcpClientService:      opts.MCPClientService,
 		configService:         opts.ConfigService,
 		userService:           opts.UserService,
 		toolGroupService:      opts.ToolGroupService,
 		dashboardService:      opts.DashboardService,
 		otelProviders:         opts.OtelProviders,
 		metrics:               opts.Metrics,
-		authSigner:            opts.AuthSigner,
+		userSessionService:   opts.UserSessionService,
+		permissionService:   opts.PermissionService,
+		deviceTokenService:  opts.DeviceTokenService,
 		dashboardOAuthResults: make(map[string]dashboardOAuthSessionResult),
 	}
 
@@ -313,12 +319,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.POST("/prompts/render", s.getPromptWithArgsHandler())
 
 		userAPI.GET("/users/whoami", requireEnterpriseMode, s.whoAmIHandler())
-
-		// MCP clients: each user manages their own; admins see all (enterprise only).
-		userAPI.GET("/clients", requireEnterpriseMode, s.listMcpClientsHandler())
-		userAPI.POST("/clients", requireEnterpriseMode, s.createMcpClientHandler())
-		userAPI.PUT("/clients/:name", requireEnterpriseMode, s.updateMcpClientHandler())
-		userAPI.DELETE("/clients/:name", requireEnterpriseMode, s.deleteMcpClientHandler())
 	}
 
 	// endpoints only accessible by an admin user in enterprise mode or anyone in development mode
@@ -356,11 +356,6 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			requireEnterpriseMode,
 			s.deleteUserHandler(),
 		)
-		adminAPI.PUT(
-			"/users/:username",
-			requireEnterpriseMode,
-			s.updateUserHandler(),
-		)
 
 		// endpoints for managing tool groups
 		adminAPI.POST("/tool-groups", s.createToolGroupHandler())
@@ -382,6 +377,7 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		{
 			dashboardPublicAPI.POST("/auth/verify", s.dashboardVerifyTokenHandler())
 			dashboardPublicAPI.POST("/auth/login", s.dashboardLoginHandler())
+			dashboardPublicAPI.POST("/auth/logout", s.dashboardLogoutHandler())
 		}
 
 		// Protected dashboard endpoints: require a valid user access token in
@@ -422,6 +418,24 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 
 			// Analytics: per-user per-server call counts (admin only).
 			dashboardAdminAPI.GET("/stats", s.dashboardCallStatsHandler())
+
+			// Permission groups (admin only).
+			dashboardAdminAPI.GET("/permission-groups", s.listPermissionGroupsHandler())
+			dashboardAdminAPI.POST("/permission-groups", s.createPermissionGroupHandler())
+			dashboardAdminAPI.GET("/permission-groups/:id", s.getPermissionGroupHandler())
+			dashboardAdminAPI.PATCH("/permission-groups/:id", s.updatePermissionGroupHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/disable", s.disablePermissionGroupHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/members", s.addPermissionGroupMemberHandler())
+			dashboardAdminAPI.DELETE("/permission-groups/:id/members/:user_id", s.removePermissionGroupMemberHandler())
+			dashboardAdminAPI.POST("/permission-groups/:id/services", s.addPermissionGroupServiceHandler())
+			dashboardAdminAPI.DELETE("/permission-groups/:id/services/:server_id", s.removePermissionGroupServiceHandler())
+
+			// Device tokens (admin only).
+			dashboardAdminAPI.GET("/device-tokens", s.listDeviceTokensHandler())
+			dashboardAdminAPI.POST("/device-tokens", s.createDeviceTokenHandler())
+			dashboardAdminAPI.GET("/device-tokens/:id", s.getDeviceTokenHandler())
+			dashboardAdminAPI.POST("/device-tokens/:id/revoke", s.revokeDeviceTokenHandler())
+			dashboardAdminAPI.DELETE("/device-tokens/:id", s.deleteDeviceTokenHandler())
 		}
 	}
 

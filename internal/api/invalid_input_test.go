@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
-	"github.com/mcpjungle/mcpjungle/internal/service/mcpclient"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	"github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -42,7 +41,6 @@ func setupInvalidInputServer(t *testing.T) *Server {
 
 	return &Server{
 		mcpService:       mcpSvc,
-		mcpClientService: mcpclient.NewMCPClientService(setup.DB),
 		toolGroupService: tgSvc,
 		userService:      user.NewUserService(setup.DB),
 	}
@@ -76,27 +74,6 @@ func TestGetPromptHandler_InvalidCanonicalNameReturnsBadRequest(t *testing.T) {
 
 	testhelpers.AssertEqual(t, http.StatusBadRequest, w.Code)
 	testhelpers.AssertStringContains(t, w.Body.String(), "does not contain a __ separator")
-}
-
-func TestUpdateMcpClientHandler_InvalidAccessTokenReturnsBadRequest(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	s := setupInvalidInputServer(t)
-	setup := testhelpers.SetupTestDB(t)
-	defer setup.Cleanup()
-	setup.CreateTestMcpClient("my-client", "test client", "oldtoken123", nil)
-	s.mcpClientService = mcpclient.NewMCPClientService(setup.DB)
-
-	router := gin.New()
-	router.PUT("/clients/:name", s.updateMcpClientHandler())
-
-	req := httptest.NewRequest(http.MethodPut, "/clients/my-client",
-		strings.NewReader(`{"access_token":"invalid token with spaces"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	testhelpers.AssertEqual(t, http.StatusBadRequest, w.Code)
-	testhelpers.AssertStringContains(t, w.Body.String(), "invalid access token")
 }
 
 func TestCreateToolGroupHandler_InvalidNameReturnsBadRequest(t *testing.T) {

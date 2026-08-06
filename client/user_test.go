@@ -15,7 +15,8 @@ func TestCreateUser(t *testing.T) {
 
 	t.Run("successful creation", func(t *testing.T) {
 		expectedResponse := &types.CreateOrUpdateUserResponse{
-			AccessToken: "user-access-token-12345",
+			Username: "testuser",
+			Role:     "member",
 		}
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +61,11 @@ func TestCreateUser(t *testing.T) {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		if response.AccessToken != expectedResponse.AccessToken {
-			t.Errorf("Expected AccessToken %s, got %s", expectedResponse.AccessToken, response.AccessToken)
+		if response.Username != expectedResponse.Username {
+			t.Errorf("Expected Username %s, got %s", expectedResponse.Username, response.Username)
+		}
+		if response.Role != expectedResponse.Role {
+			t.Errorf("Expected Role %s, got %s", expectedResponse.Role, response.Role)
 		}
 	})
 
@@ -120,11 +124,11 @@ func TestListUsers(t *testing.T) {
 		expectedUsers := []*types.User{
 			{
 				Username: "user1",
-				Role:     "user",
+				Role:     "member",
 			},
 			{
 				Username: "admin1",
-				Role:     "admin",
+				Role:     "system_admin",
 			},
 		}
 
@@ -310,7 +314,7 @@ func TestCreateUserWithDifferentUsernames(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
-				response := &types.CreateOrUpdateUserResponse{AccessToken: "test-token"}
+				response := &types.CreateOrUpdateUserResponse{Username: tc.expected, Role: "member"}
 				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()

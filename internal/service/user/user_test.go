@@ -30,10 +30,7 @@ func TestCreateUser(t *testing.T) {
 	testhelpers.AssertNotNil(t, user)
 	// Verify user properties
 	testhelpers.AssertEqual(t, u.Username, user.Username)
-	testhelpers.AssertEqual(t, types.UserRoleUser, user.Role)
-	if user.AccessToken == "" {
-		t.Error("Expected access token to be generated")
-	}
+	testhelpers.AssertEqual(t, types.UserRoleMember, user.Role)
 }
 
 func TestCreateUserWithExistingUsername(t *testing.T) {
@@ -63,65 +60,10 @@ func TestCreateAdminUser(t *testing.T) {
 	testhelpers.AssertNotNil(t, user)
 	// Verify admin user properties
 	testhelpers.AssertEqual(t, "admin", user.Username)
-	testhelpers.AssertEqual(t, types.UserRoleAdmin, user.Role)
+	testhelpers.AssertEqual(t, types.UserRoleSystemAdmin, user.Role)
 	if user.PasswordHash == "" {
 		t.Error("Expected password hash to be set")
 	}
-	if user.AccessToken != "" {
-		t.Error("Expected admin to have no legacy access token")
-	}
-}
-
-func TestCreateUserAccessToken(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	u := &model.User{
-		Username:    "testuser2",
-		AccessToken: "custom-token-123",
-	}
-	user, err := svc.CreateUser(u)
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, user)
-	// Verify user properties
-	testhelpers.AssertEqual(t, u.Username, user.Username)
-	testhelpers.AssertEqual(t, types.UserRoleUser, user.Role)
-	testhelpers.AssertEqual(t, u.AccessToken, user.AccessToken)
-}
-
-func TestCreateUserInvalidAccessToken(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	u := &model.User{
-		Username:    "testuser2",
-		AccessToken: "short", // invalid token (too short)
-	}
-	user, err := svc.CreateUser(u)
-	testhelpers.AssertError(t, err)
-	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrInvalidInput), "expected ErrInvalidInput")
-	if user != nil {
-		t.Error("Expected user creation to fail due to invalid access token")
-	}
-}
-
-func TestGetUserByAccessToken(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	// Create a test user first
-	u := &model.User{
-		Username: "testuser2",
-	}
-	user, _ := svc.CreateUser(u)
-	// Test getting user by valid token
-	retrievedUser, _ := svc.GetUserByAccessToken(user.AccessToken)
-	testhelpers.AssertNotNil(t, retrievedUser)
-	testhelpers.AssertEqual(t, u.Username, retrievedUser.Username)
-	testhelpers.AssertEqual(t, user.AccessToken, retrievedUser.AccessToken)
-	// Test getting user by invalid token
-	_, err := svc.GetUserByAccessToken("invalid-token")
-	testhelpers.AssertError(t, err)
 }
 
 func TestListUsers(t *testing.T) {
@@ -166,14 +108,15 @@ func TestDeleteUser(t *testing.T) {
 		Username: "testuser2",
 	}
 	user, _ := svc.CreateUser(u)
+	testhelpers.AssertNotNil(t, user)
 	// Verify user exists
-	_, err := svc.GetUserByAccessToken(user.AccessToken)
+	_, err := svc.GetUserByUsername(u.Username)
 	testhelpers.AssertNoError(t, err)
 	// Delete the user
 	err = svc.DeleteUser(u.Username)
 	testhelpers.AssertNoError(t, err)
 	// Verify user was deleted
-	_, err = svc.GetUserByAccessToken(user.AccessToken)
+	_, err = svc.GetUserByUsername(u.Username)
 	testhelpers.AssertError(t, err)
 }
 
@@ -199,90 +142,4 @@ func TestDeleteAdminUser(t *testing.T) {
 	// Verify admin user still exists
 	retrievedUser, _ := svc.GetUserByUsername("admin")
 	testhelpers.AssertEqual(t, "admin", retrievedUser.Username)
-}
-
-func TestUpdateUser(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	// Create a test user
-	u := &model.User{
-		Username: "testuser2",
-	}
-	_, _ = svc.CreateUser(u)
-	// Update the user's access token
-	newToken := "new-custom-token-456"
-	updateInput := &model.User{
-		Username:    u.Username,
-		AccessToken: newToken,
-	}
-	updatedUser, err := svc.UpdateUser(updateInput)
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertNotNil(t, updatedUser)
-	testhelpers.AssertEqual(t, newToken, updatedUser.AccessToken)
-	// Verify the update persisted
-	retrievedUser, _ := svc.GetUserByAccessToken(newToken)
-	testhelpers.AssertNotNil(t, retrievedUser)
-	testhelpers.AssertEqual(t, u.Username, retrievedUser.Username)
-}
-
-func TestUpdateUserInvalidAccessToken(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	// Create a test user
-	u := &model.User{
-		Username: "testuser2",
-	}
-	_, _ = svc.CreateUser(u)
-	// Try to update with invalid access token
-	updateInput := &model.User{
-		Username:    u.Username,
-		AccessToken: "token\nwith\t\twhitespace", // invalid token
-	}
-	updatedUser, err := svc.UpdateUser(updateInput)
-	testhelpers.AssertError(t, err)
-	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrInvalidInput), "expected ErrInvalidInput")
-	if updatedUser != nil {
-		t.Error("Expected update to fail due to invalid access token")
-	}
-}
-
-func TestUpdateUserNotFound(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	// Try to update non-existent user
-	updateInput := &model.User{
-		Username:    "nonexistent",
-		AccessToken: "new-token-789",
-	}
-	updatedUser, err := svc.UpdateUser(updateInput)
-	testhelpers.AssertError(t, err)
-	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrNotFound), "expected ErrNotFound")
-	if updatedUser != nil {
-		t.Error("Expected update to fail for non-existent user")
-	}
-}
-
-func TestUpdateUserNoAccessToken(t *testing.T) {
-	setup, _ := testhelpers.SetupUserTest(t)
-	defer setup.Cleanup()
-	svc := NewUserService(setup.DB)
-	// Create a test user
-	u := &model.User{
-		Username: "testuser2",
-	}
-	_, _ = svc.CreateUser(u)
-	// Update without changing access token
-	updateInput := &model.User{
-		Username: u.Username,
-		// No AccessToken field set
-	}
-	updatedUser, err := svc.UpdateUser(updateInput)
-	testhelpers.AssertError(t, err)
-	testhelpers.AssertTrue(t, errors.Is(err, apierrors.ErrInvalidInput), "expected ErrInvalidInput")
-	if updatedUser != nil {
-		t.Error("Expected update to fail for non-existent user")
-	}
 }

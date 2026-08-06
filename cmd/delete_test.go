@@ -25,31 +25,6 @@ func TestDeleteCommandStructure(t *testing.T) {
 	testhelpers.AssertEqual(t, 3, len(subcommands))
 }
 
-func TestDeleteMcpClientSubcommand(t *testing.T) {
-	// Test command properties
-	testhelpers.AssertEqual(t, "mcp-client [name]", deleteMcpClientCmd.Use)
-	testhelpers.AssertEqual(t, "Delete an MCP client (Enterprise mode)", deleteMcpClientCmd.Short)
-	testhelpers.AssertNotNil(t, deleteMcpClientCmd.Long)
-	testhelpers.AssertTrue(t, len(deleteMcpClientCmd.Long) > 0, "Long description should not be empty")
-
-	// Test command functions
-	testhelpers.AssertNotNil(t, deleteMcpClientCmd.RunE)
-	testhelpers.AssertNotNil(t, deleteMcpClientCmd.Args)
-
-	// Test long description content
-	longDesc := deleteMcpClientCmd.Long
-	expectedPhrases := []string{
-		"Delete an MCP client from the registry",
-		"instantly revokes all access",
-		"Enterprise mode",
-	}
-
-	for _, phrase := range expectedPhrases {
-		testhelpers.AssertTrue(t, testhelpers.Contains(longDesc, phrase),
-			"Expected long description to contain: "+phrase)
-	}
-}
-
 func TestDeleteUserSubcommand(t *testing.T) {
 	// Test command properties
 	testhelpers.AssertEqual(t, "user [username]", deleteUserCmd.Use)
@@ -108,7 +83,7 @@ func TestDeleteCommandIntegration(t *testing.T) {
 
 	// Test all delete subcommands are properly configured
 	subcommands := deleteCmd.Commands()
-	expectedSubcommands := []string{"mcp-client", "user", "group"}
+	expectedSubcommands := []string{"user", "device-token", "group"}
 
 	testhelpers.AssertEqual(t, len(expectedSubcommands), len(subcommands))
 
@@ -127,7 +102,6 @@ func TestDeleteCommandIntegration(t *testing.T) {
 // Test argument validation
 func TestDeleteCommandArgumentValidation(t *testing.T) {
 	// Test that commands properly validate arguments
-	testhelpers.AssertNotNil(t, deleteMcpClientCmd.Args)
 	testhelpers.AssertNotNil(t, deleteUserCmd.Args)
 	testhelpers.AssertNotNil(t, deleteToolGroupCmd.Args)
 }

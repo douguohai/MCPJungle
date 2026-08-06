@@ -73,8 +73,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid credentials")
 	}
 	cmd.Println("Authenticated as", user.Username)
-	if user.Role == string(types.UserRoleAdmin) {
-		cmd.Println("You are an administrator of MCPJungle")
+	if user.Role == string(types.UserRoleSystemAdmin) {
+		cmd.Println("You are a system administrator of MCPJungle")
 	}
 
 	cfg := &config.ClientConfig{

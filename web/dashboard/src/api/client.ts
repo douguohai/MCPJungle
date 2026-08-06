@@ -1,5 +1,5 @@
 import axios, { type AxiosError } from "axios";
-import { clearToken, getToken, isDevSession } from "../store/auth";
+import { clearUser } from "../store/auth";
 
 export const http = axios.create({
   baseURL: "/api/dashboard",
@@ -8,23 +8,14 @@ export const http = axios.create({
   timeout: 60000,
 });
 
-// Attach the access token (when not in a dev session) to every request.
-http.interceptors.request.use((config) => {
-  if (!isDevSession()) {
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
-// On 401, clear the stored session and bounce to the login page.
+// On 401, clear the stored user info and bounce to the login page.
+// Browser requests carry the session cookie automatically (SameSite=Lax);
+// no Authorization header is needed.
 http.interceptors.response.use(
   (resp) => resp,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      clearToken();
+      clearUser();
       if (!window.location.pathname.endsWith("/login")) {
         window.location.href = "/login";
       }

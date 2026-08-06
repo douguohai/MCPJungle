@@ -38,6 +38,5 @@ dist/
 
 # Local dev
 mcpjungle
-mcp.db
-mcpjungle.db
-ent-test.db
+.codegraph/
+.omx/

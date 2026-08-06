@@ -196,6 +196,18 @@ func (m *MCPService) GetMcpServer(name string) (*model.McpServer, error) {
 	return &serverModel, nil
 }
 
+// GetMcpServerByID fetches a server from the database by primary key.
+func (m *MCPService) GetMcpServerByID(id uint) (*model.McpServer, error) {
+	var serverModel model.McpServer
+	if err := m.db.First(&serverModel, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("MCP server not found: %w", apierrors.ErrNotFound)
+		}
+		return nil, err
+	}
+	return &serverModel, nil
+}
+
 // EnableMcpServer enables all tools, prompts and resources registered by the given MCP server.
 // It returns the names of the enabled tools and prompts.
 // If even a single tool, prompt or resource fails to enable, the operation fails.

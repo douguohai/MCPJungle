@@ -5,7 +5,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import AuthLayout from "./layouts/AuthLayout";
 import RequireAuth from "./components/RouteGuard";
 import { authApi } from "./api/auth";
-import { getToken, setDevSession } from "./store/auth";
+import { setDevSession, setUser } from "./store/auth";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
 import ServersPage from "./pages/ServersPage";
@@ -14,7 +14,7 @@ import ToolGroupsPage from "./pages/ToolGroupsPage";
 import PromptsPage from "./pages/PromptsPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
-import ClientsPage from "./pages/ClientsPage";
+import DeviceTokensPage from "./pages/DeviceTokensPage";
 import UsersPage from "./pages/UsersPage";
 import StatsPage from "./pages/StatsPage";
 
@@ -24,19 +24,19 @@ import StatsPage from "./pages/StatsPage";
 function useBootstrap() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (getToken()) {
-      setReady(true);
-      return;
-    }
     authApi
-      .verify("")
+      .verify()
       .then((res) => {
-        if (res.authenticated && res.mode === "development") {
-          setDevSession({ username: res.username ?? "developer", role: res.role });
+        if (res.authenticated) {
+          if (res.mode === "development") {
+            setDevSession({ username: res.username ?? "developer", role: res.role });
+          } else {
+            setUser({ username: res.username, role: res.role });
+          }
         }
       })
       .catch(() => {
-        // enterprise mode without a token -> login page
+        // no valid session — will show login page via RouteGuard
       })
       .finally(() => setReady(true));
   }, []);
@@ -78,7 +78,7 @@ export default function App() {
         <Route path="prompts" element={<PromptsPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />
-        <Route path="clients" element={<ClientsPage />} />
+        <Route path="device-tokens" element={<DeviceTokensPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="stats" element={<StatsPage />} />
       </Route>

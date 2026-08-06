@@ -19,30 +19,23 @@ func ProxyToolFilter(ctx context.Context, tools []mcp.Tool) []mcp.Tool {
 		return tools
 	}
 
-	c, ok := ctx.Value("client").(*model.McpClient)
-	if !ok || c == nil {
-		// Enterprise mode requires authenticated client context; fail closed if absent.
+	dt, ok := ctx.Value("device_token").(*model.DeviceToken)
+	if !ok || dt == nil {
+		// Enterprise mode requires an authenticated device token; fail closed if absent.
 		return nil
 	}
-	// owner user, when available, enforces user-level AllowedServers
-	u, _ := ctx.Value("user").(*model.User)
+
+	effective, _ := ctx.Value("effective_services").(map[string]bool)
+	if effective == nil {
+		return nil
+	}
 
 	var filteredTools []mcp.Tool
-	allowedServers := make(map[string]bool)
-
 	for _, tool := range tools {
 		serverName, _, _ := splitServerToolName(tool.Name)
-
-		allowed, cached := allowedServers[serverName]
-		if !cached {
-			// client AllowList AND (when present) the owner user's AllowedServers
-			allowed = c.CheckHasServerAccess(serverName) && (u == nil || u.CheckAllowedServer(serverName))
-			allowedServers[serverName] = allowed
-		}
-		if allowed {
+		if effective[serverName] {
 			filteredTools = append(filteredTools, tool)
 		}
 	}
-
 	return filteredTools
 }

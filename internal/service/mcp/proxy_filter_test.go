@@ -7,18 +7,18 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/datatypes"
 )
 
 func TestMcpProxyToolFilter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		mode      model.ServerMode
-		client    *model.McpClient
-		tools     []mcp.Tool
-		wantNames []string
+		name              string
+		mode              model.ServerMode
+		deviceToken       *model.DeviceToken
+		effectiveServices map[string]bool
+		tools             []mcp.Tool
+		wantNames         []string
 	}{
 		{
 			name: "development mode returns all tools",
@@ -32,10 +32,10 @@ func TestMcpProxyToolFilter(t *testing.T) {
 		{
 			name: "enterprise mode filters unauthorized tools",
 			mode: model.ModeEnterprise,
-			client: &model.McpClient{
-				Name:      "claude",
-				AllowList: datatypes.JSON(`["time"]`),
+			deviceToken: &model.DeviceToken{
+				Name: "test-token",
 			},
+			effectiveServices: map[string]bool{"time": true},
 			tools: []mcp.Tool{
 				{Name: "time__get_current_time"},
 				{Name: "deepwiki__search_wiki"},
@@ -43,12 +43,12 @@ func TestMcpProxyToolFilter(t *testing.T) {
 			wantNames: []string{"time__get_current_time"},
 		},
 		{
-			name: "enterprise mode wildcard allows all tools",
+			name: "enterprise mode with all servers allowed",
 			mode: model.ModeEnterprise,
-			client: &model.McpClient{
-				Name:      "cursor",
-				AllowList: datatypes.JSON(`["*"]`),
+			deviceToken: &model.DeviceToken{
+				Name: "test-token",
 			},
+			effectiveServices: map[string]bool{"time": true, "deepwiki": true},
 			tools: []mcp.Tool{
 				{Name: "time__get_current_time"},
 				{Name: "deepwiki__search_wiki"},
@@ -63,8 +63,11 @@ func TestMcpProxyToolFilter(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.WithValue(context.Background(), "mode", tt.mode)
-			if tt.client != nil {
-				ctx = context.WithValue(ctx, "client", tt.client)
+			if tt.deviceToken != nil {
+				ctx = context.WithValue(ctx, "device_token", tt.deviceToken)
+			}
+			if tt.effectiveServices != nil {
+				ctx = context.WithValue(ctx, "effective_services", tt.effectiveServices)
 			}
 
 			got := ProxyToolFilter(ctx, tt.tools)
@@ -94,7 +97,7 @@ func TestMcpProxyToolFilter_InvalidModeTypeInContext(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestMcpProxyToolFilter_EnterpriseMissingClientInContext(t *testing.T) {
+func TestMcpProxyToolFilter_EnterpriseMissingDeviceTokenInContext(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
@@ -105,11 +108,11 @@ func TestMcpProxyToolFilter_EnterpriseMissingClientInContext(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestMcpProxyToolFilter_EnterpriseInvalidClientTypeInContext(t *testing.T) {
+func TestMcpProxyToolFilter_EnterpriseInvalidDeviceTokenTypeInContext(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", "not-a-client")
+	ctx = context.WithValue(ctx, "device_token", "not-a-device-token")
 	got := ProxyToolFilter(ctx, []mcp.Tool{
 		{Name: "time__get_current_time"},
 	})
@@ -117,12 +120,24 @@ func TestMcpProxyToolFilter_EnterpriseInvalidClientTypeInContext(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestMcpProxyToolFilter_EnterpriseNilClientInContext(t *testing.T) {
+func TestMcpProxyToolFilter_EnterpriseNilDeviceTokenInContext(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	var client *model.McpClient
-	ctx = context.WithValue(ctx, "client", client)
+	var dt *model.DeviceToken
+	ctx = context.WithValue(ctx, "device_token", dt)
+	got := ProxyToolFilter(ctx, []mcp.Tool{
+		{Name: "time__get_current_time"},
+	})
+
+	assert.Empty(t, got)
+}
+
+func TestMcpProxyToolFilter_EnterpriseMissingEffectiveServicesInContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
+	ctx = context.WithValue(ctx, "device_token", &model.DeviceToken{Name: "test"})
 	got := ProxyToolFilter(ctx, []mcp.Tool{
 		{Name: "time__get_current_time"},
 	})
@@ -134,10 +149,8 @@ func TestMcpProxyToolFilter_EnterpriseMalformedToolNamesAreDenied(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "claude",
-		AllowList: datatypes.JSON(`["time"]`),
-	})
+	ctx = context.WithValue(ctx, "device_token", &model.DeviceToken{Name: "test"})
+	ctx = context.WithValue(ctx, "effective_services", map[string]bool{"time": true})
 
 	got := ProxyToolFilter(ctx, []mcp.Tool{
 		{Name: "missing_separator"},

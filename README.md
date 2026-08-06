@@ -205,7 +205,7 @@ docker compose -f docker-compose.prod.yaml up -d
 > The `enterprise` mode used to be called `production` mode.
 > The mode has now been renamed for clarity. Everything else remains the same.
 
-This will start the MCPJungle server along with a persistent Postgres database container.
+This will start the MCPJungle server along with a persistent MySQL database container.
 
 You can quickly verify that the server is running:
 ```bash
@@ -236,7 +236,7 @@ The default [MCPJungle Docker image](https://ghcr.io/mcpjungle/mcpjungle) is ver
 
 It is therefore suitable and recommended for production deployments.
 
-For the database, we recommend you deploy a separate Postgres DB cluster and supply its endpoint to mcpjungle (see [Database](#database) section below).
+For the database, we recommend you deploy a separate MySQL DB cluster and supply its endpoint to mcpjungle (see [Database](#database) section below).
 
 You can see the definitions of the [standard Docker image](./Dockerfile) and the [stdio Docker image](./stdio.Dockerfile).
 
@@ -257,51 +257,37 @@ The recommended way to stop the server process is to send a `SIGTERM` signal to 
 
 
 ### Database
-The mcpjungle server relies on a database and by default, creates a SQLite DB file `mcpjungle.db` in the current working directory.
+The mcpjungle server relies on a **MySQL 8.0** database. MySQL is the only supported database — SQLite and PostgreSQL are no longer supported.
 
-This is okay when you're just testing things out locally.
+You must provide a MySQL connection, either as a full DSN or via individual environment variables. If neither `DATABASE_URL` nor `MYSQL_HOST` is set, the server refuses to start.
 
-If you do not provide PostgreSQL configuration or a custom SQLite path, mcpjungle uses `./mcpjungle.db`.
-
-You can optionally set a custom file path for the SQLite DB file:
-
-```bash
-mcpjungle start --sqlite-db-path ./.mcpjungle.db
-
-# or
-export SQLITE_DB_PATH=/path/to/.mcpjungle.db
-mcpjungle start
-```
-
-NOTE: Deleting that SQLite file removes all registered server data and other MCPJungle state stored in it.
-
-For more serious deployments, mcpjungle also supports Postgresql. You can supply the DSN to connect to it:
+Supply the DSN via `DATABASE_URL`:
 
 ```bash
 # You can supply the database DSN as an env var
-export DATABASE_URL=postgres://admin:root@localhost:5432/mcpjungle_db
+export DATABASE_URL=mysql://admin:secret@localhost:3306/mcpjungle
 
-#run as container
-docker run ghcr.io/mcpjungle/mcpjungle:latest
+# run as container
+docker run -e DATABASE_URL=mysql://admin:secret@host:3306/mcpjungle ghcr.io/mcpjungle/mcpjungle:latest
 
 # or run directly
 mcpjungle start
 ```
 
-You can also supply postgres-specific env vars or files if you don't prefer using the DSN:
+You can also supply MySQL-specific env vars or files if you don't prefer using the DSN:
 ```bash
-# host is mandatory if you're using postgres-specific env vars
-export POSTGRES_HOST=localhost
-export POSTGRES_PORT=5432
+# host is mandatory if you're using MySQL-specific env vars
+export MYSQL_HOST=localhost
+export MYSQL_PORT=3306
 
-export POSTGRES_USER=admin
-export POSTGRES_USER_FILE=/path/to/user-file
+export MYSQL_USER=admin
+export MYSQL_USER_FILE=/path/to/user-file
 
-export POSTGRES_PASSWORD=secret
-export POSTGRES_PASSWORD_FILE=/path/to/password-file
+export MYSQL_PASSWORD=secret
+export MYSQL_PASSWORD_FILE=/path/to/password-file
 
-export POSTGRES_DB=mcpjungle_db
-export POSTGRES_DB_FILE=/path/to/db-file
+export MYSQL_DB=mcpjungle
+export MYSQL_DB_FILE=/path/to/db-file
 
 mcpjungle start
 ```

@@ -3,11 +3,18 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestResolveTargetDirForExport(t *testing.T) {
+	// Some cases (e.g. "relative path") change the working directory. Restore it
+	// on exit so t.TempDir cleanup does not fail on Windows, where a process
+	// cannot delete the directory it is running in.
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
 	tests := []struct {
 		name          string
 		setup         func() (string, error)
@@ -191,6 +198,9 @@ func TestResolveTargetDirForExport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && tt.name == "invalid permissions for directory creation" {
+				t.Skip("Unix permission bits are not enforced on Windows")
+			}
 			expectedDir, _ := tt.setup()
 			defer tt.cleanup(expectedDir)
 

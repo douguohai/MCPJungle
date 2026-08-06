@@ -14,22 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
+func (m *MCPService) authorizeProxyServerAccess(ctx context.Context, serverName string) error {
 	serverMode := ctx.Value("mode").(model.ServerMode)
 	if !model.IsEnterpriseMode(serverMode) {
 		return nil
 	}
 
-	c := ctx.Value("client").(*model.McpClient)
-	if !c.CheckHasServerAccess(serverName) {
-		return fmt.Errorf("client %s is not authorized to access MCP server %s", c.Name, serverName)
+	effective, _ := ctx.Value("effective_services").(map[string]bool)
+	if effective == nil || !effective[serverName] {
+		return fmt.Errorf("access denied: device token is not authorized to access MCP server %s", serverName)
 	}
-	if u, ok := ctx.Value("user").(*model.User); ok && u != nil {
-		if !u.CheckAllowedServer(serverName) {
-			return fmt.Errorf("user %s is not permitted to access MCP server %s", u.Username, serverName)
-		}
-	}
-
 	return nil
 }
 
@@ -37,15 +31,15 @@ func authorizeProxyServerAccess(ctx context.Context, serverName string) error {
 // count is stored. Best-effort: errors are ignored so analytics never breaks a
 // tool call.
 func (m *MCPService) recordUserCall(ctx context.Context, serverName string) {
-	c, ok := ctx.Value("client").(*model.McpClient)
-	if !ok || c == nil || c.UserID == 0 {
-		return // dev mode or client without an owner user
+	dt, ok := ctx.Value("device_token").(*model.DeviceToken)
+	if !ok || dt == nil || dt.UserID == 0 {
+		return // dev mode or token without an owner
 	}
 	today := time.Now().UTC().Format("2006-01-02")
 	var stat model.UserCallStat
-	err := m.db.Where("user_id = ? AND server_name = ? AND date = ?", c.UserID, serverName, today).First(&stat).Error
+	err := m.db.Where("user_id = ? AND server_name = ? AND date = ?", dt.UserID, serverName, today).First(&stat).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		_ = m.db.Create(&model.UserCallStat{UserID: c.UserID, ServerName: serverName, Date: today, Count: 1}).Error
+		_ = m.db.Create(&model.UserCallStat{UserID: dt.UserID, ServerName: serverName, Date: today, Count: 1}).Error
 		return
 	}
 	if err == nil {
@@ -66,7 +60,7 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 		return nil, fmt.Errorf("tool name does not contain a %s separator: %w", serverToolNameSep, apierrors.ErrInvalidInput)
 	}
 
-	if err := authorizeProxyServerAccess(ctx, serverName); err != nil {
+	if err := m.authorizeProxyServerAccess(ctx, serverName); err != nil {
 		return nil, err
 	}
 
@@ -123,7 +117,7 @@ func (m *MCPService) mcpProxyResourceHandler(ctx context.Context, request mcp.Re
 		return nil, fmt.Errorf("failed to get resource %s from DB: %w", request.Params.URI, err)
 	}
 
-	if err := authorizeProxyServerAccess(ctx, resource.Server.Name); err != nil {
+	if err := m.authorizeProxyServerAccess(ctx, resource.Server.Name); err != nil {
 		return nil, err
 	}
 
@@ -160,7 +154,7 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 		return nil, fmt.Errorf("prompt name does not contain a %s separator: %w", serverPromptNameSep, apierrors.ErrInvalidInput)
 	}
 
-	if err := authorizeProxyServerAccess(ctx, serverName); err != nil {
+	if err := m.authorizeProxyServerAccess(ctx, serverName); err != nil {
 		return nil, err
 	}
 

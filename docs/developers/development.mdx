@@ -18,7 +18,7 @@ Mcpjungle consists of several main components:
 - **CLI**: command-line interface for managing MCP servers and tools in `cmd/`
 - **HTTP API**: REST API for management workflows in `internal/api/`
 - **MCP Gateway server**: MCP protocol handling in `internal/service/mcp/`
-- **Database layer**: SQLite and PostgreSQL persistence in `internal/db/`
+- **Database layer**: MySQL 8.0 persistence in `internal/db/`
 
 ## Codebase entry points
 
@@ -82,7 +82,7 @@ See the [golangci-lint installation docs](https://golangci-lint.run/docs/welcome
 
 - Go 1.21 or later
 - Docker and Docker Compose
-- SQLite3 for local development
+- MySQL 8.0 client for local development
 - Node.js if you want to use MCP Inspector
 
 ### Quick start
@@ -103,33 +103,19 @@ goreleaser build --single-target --clean --snapshot
 
 ## Database development
 
-### SQLite
+### MySQL
 
-When running with SQLite, you can inspect the local database using `sqlite3`:
+Mcpjungle persists all of its data in a MySQL 8.0 database. You can inspect it with any MySQL client, for example the `mysql` CLI:
 
 ```bash
-sqlite3 mcpjungle.db
+mysql -h 127.0.0.1 -P 3306 -u mcpjungle -p mcpjungle
 
-.tables
+SHOW TABLES;
 SELECT * FROM mcp_servers;
 SELECT * FROM tools;
 ```
 
-For backward compatibility, Mcpjungle still reads existing `mcp.db` files if they exist, but new databases are created as `mcpjungle.db`.
-If you start the server with `--sqlite-db-path` or `SQLITE_DB_PATH`, inspect that configured file path instead.
-
-### PostgreSQL
-
-When running with Docker Compose, you can inspect PostgreSQL through pgAdmin:
-
-1. Open `http://localhost:5050`
-2. Log in with username `admin@admin.com` and password `admin`
-3. Add a database server with:
-   - Host: `db`
-   - Port: `5432`
-   - Username: `mcpjungle`
-   - Password: `mcpjungle`
-   - Database: `mcpjungle`
+If you run the database through the Docker Compose stack, connect to the `db` service on port `3306` using the credentials configured in your compose file. Make sure the database uses the `utf8mb4` character set (collation `utf8mb4_0900_ai_ci`).
 
 ## MCP server testing
 
@@ -213,7 +199,7 @@ GoReleaser runs `bash ./scripts/build-dashboard.sh` in its `before.hooks` before
 Common issues:
 
 1. Build failures: check Go version and dependencies
-2. Database connection problems: verify PostgreSQL or SQLite access
+2. Database connection problems: verify MySQL access
 3. MCP registration failures: verify the upstream server is reachable
 4. Docker filesystem access issues: verify the `/host` mount
 

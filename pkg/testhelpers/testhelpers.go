@@ -6,19 +6,105 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"net/url"
+	"os"
 	"testing"
+	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
-// CreateTestDB creates a test database using SQLite in-memory database
-func CreateTestDB() (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+// MysqlTestDSNEnvVar names the environment variable that provides a live MySQL
+// DSN for database-backed tests, in the form mysql://user:pass@host:port/db.
+// MySQL has no in-memory mode, so when unset, database tests are skipped. The
+// database name in the URL is ignored — each test gets its own isolated
+// database. The account needs CREATE/DROP DATABASE privilege.
+const MysqlTestDSNEnvVar = "TEST_MYSQL_DSN"
+
+// CreateTestDB connects to the MySQL server described by TEST_MYSQL_DSN,
+// creates a uniquely-named isolated database, and returns a *gorm.DB bound to
+// it. The per-test database is dropped automatically via t.Cleanup when the
+// test completes, so callers do not need to drop it themselves.
+//
+// TEST_MYSQL_DSN must be a mysql://user:pass@host:port/db URL. When unset, the
+// calling test is skipped.
+func CreateTestDB(t *testing.T) (*gorm.DB, error) {
+	t.Helper()
+
+	dsn := os.Getenv(MysqlTestDSNEnvVar)
+	if dsn == "" {
+		t.Skipf("%s not set, skipping database test", MysqlTestDSNEnvVar)
+	}
+
+	user, pass, host, port, err := parseMySQLURL(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Connect against the built-in `mysql` system database so we can CREATE/DROP
+	// the per-test database.
+	adminDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/mysql?charset=utf8mb4&parseTime=True&loc=Local",
+		url.QueryEscape(user), url.QueryEscape(pass), host, port)
+	adminDB, err := gorm.Open(mysql.Open(adminDSN), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to mysql server: %w", err)
+	}
+
+	testDBName := fmt.Sprintf("mcpjungle_test_%d_%d", time.Now().UnixNano(), rand.Intn(1000000))
+	createSQL := fmt.Sprintf("CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci", testDBName)
+	if err := adminDB.Exec(createSQL).Error; err != nil {
+		closeQuietly(adminDB)
+		return nil, fmt.Errorf("failed to create test database %q (does the account have CREATE DATABASE privilege?): %w", testDBName, err)
+	}
+
+	testDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local&sql_mode=ALLOW_INVALID_DATES",
+		url.QueryEscape(user), url.QueryEscape(pass), host, port, testDBName)
+	testDB, err := gorm.Open(mysql.Open(testDSN), &gorm.Config{})
+	if err != nil {
+		_ = adminDB.Exec(fmt.Sprintf("DROP DATABASE `%s`", testDBName))
+		closeQuietly(adminDB)
+		return nil, fmt.Errorf("failed to connect to test database: %w", err)
+	}
+
+	t.Cleanup(func() {
+		closeQuietly(testDB)
+		_ = adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDBName))
+		closeQuietly(adminDB)
+	})
+
+	return testDB, nil
+}
+
+// parseMySQLURL extracts the user/password/host/port from a mysql:// DSN.
+func parseMySQLURL(dsn string) (user, pass, host, port string, err error) {
+	u, perr := url.Parse(dsn)
+	if perr != nil || u.User == nil || u.Host == "" {
+		return "", "", "", "", fmt.Errorf("invalid %s %q: must be mysql://user:pass@host:port/db", MysqlTestDSNEnvVar, dsn)
+	}
+	user = u.User.Username()
+	pass, _ = u.User.Password()
+	host = u.Hostname()
+	port = u.Port()
+	if port == "" {
+		port = "3306"
+	}
+	return user, pass, host, port, nil
+}
+
+// closeQuietly closes a gorm.DB's underlying connection, ignoring errors.
+func closeQuietly(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
 }
 
 // AssertError asserts that an error occurred
@@ -250,13 +336,12 @@ type TestDBSetup struct {
 func SetupTestDB(t *testing.T) *TestDBSetup {
 	t.Helper()
 
-	db, err := CreateTestDB()
+	db, err := CreateTestDB(t)
 	AssertNoError(t, err)
 
 	// Migrate all common models
 	err = db.AutoMigrate(
 		&model.User{},
-		&model.McpClient{},
 		&model.McpServer{},
 		&model.Tool{},
 		&model.ServerConfig{},
@@ -266,6 +351,13 @@ func SetupTestDB(t *testing.T) *TestDBSetup {
 		&model.UpstreamOAuthPendingSession{},
 		&model.UpstreamOAuthToken{},
 		&model.UserCallStat{},
+		// New identity & authorization models (stage 1).
+		&model.UserSession{},
+		&model.DeviceToken{},
+		&model.DeviceTokenService{},
+		&model.PermissionGroup{},
+		&model.PermissionGroupMember{},
+		&model.PermissionGroupService{},
 	)
 	AssertNoError(t, err)
 
@@ -280,9 +372,8 @@ func SetupUserTest(t *testing.T) (*TestDBSetup, *model.User) {
 
 	// Create a basic test user
 	testUser := &model.User{
-		Username:    "testuser",
-		Role:        types.UserRoleUser,
-		AccessToken: "test-access-token-123",
+		Username: "testuser",
+		Role:     types.UserRoleMember,
 	}
 
 	err := setup.DB.Create(testUser).Error
@@ -299,9 +390,8 @@ func SetupAdminTest(t *testing.T) (*TestDBSetup, *model.User) {
 
 	// Create a basic test admin user
 	testAdmin := &model.User{
-		Username:    "testadmin",
-		Role:        types.UserRoleAdmin,
-		AccessToken: "test-admin-token-456",
+		Username: "testadmin",
+		Role:     types.UserRoleSystemAdmin,
 	}
 
 	err := setup.DB.Create(testAdmin).Error
@@ -322,26 +412,6 @@ func SetupMCPTest(t *testing.T) *TestDBSetup {
 	return setup
 }
 
-// SetupClientTest creates a test database with MCP client models and a basic test client
-func SetupClientTest(t *testing.T) (*TestDBSetup, *model.McpClient) {
-	t.Helper()
-
-	setup := SetupTestDB(t)
-
-	// Create a basic test MCP client
-	testClient := &model.McpClient{
-		Name:        "test-client",
-		Description: "Test MCP client for unit tests",
-		AccessToken: "test-client-token-789",
-		AllowList:   []byte("[]"), // Empty allow list
-	}
-
-	err := setup.DB.Create(testClient).Error
-	AssertNoError(t, err)
-
-	return setup, testClient
-}
-
 // SetupServerConfigTest creates a test database with server config models
 func SetupServerConfigTest(t *testing.T) *TestDBSetup {
 	t.Helper()
@@ -354,11 +424,10 @@ func SetupServerConfigTest(t *testing.T) *TestDBSetup {
 }
 
 // CreateTestUser creates a test user with the given parameters
-func (s *TestDBSetup) CreateTestUser(username string, role types.UserRole, accessToken string) *model.User {
+func (s *TestDBSetup) CreateTestUser(username string, role types.UserRole) *model.User {
 	user := &model.User{
-		Username:    username,
-		Role:        role,
-		AccessToken: accessToken,
+		Username: username,
+		Role:     role,
 	}
 
 	err := s.DB.Create(user).Error
@@ -367,37 +436,6 @@ func (s *TestDBSetup) CreateTestUser(username string, role types.UserRole, acces
 	}
 
 	return user
-}
-
-// CreateTestMcpClient creates a test MCP client with the given parameters
-func (s *TestDBSetup) CreateTestMcpClient(name, description, accessToken string, allowList []string) *model.McpClient {
-	allowListJSON := []byte("[]")
-	if len(allowList) > 0 {
-		// Create a proper JSON array
-		jsonStr := "["
-		for i, item := range allowList {
-			if i > 0 {
-				jsonStr += ","
-			}
-			jsonStr += fmt.Sprintf(`"%s"`, item)
-		}
-		jsonStr += "]"
-		allowListJSON = []byte(jsonStr)
-	}
-
-	client := &model.McpClient{
-		Name:        name,
-		Description: description,
-		AccessToken: accessToken,
-		AllowList:   allowListJSON,
-	}
-
-	err := s.DB.Create(client).Error
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create test MCP client: %v", err))
-	}
-
-	return client
 }
 
 // CreateTestMcpServer creates a test MCP server with the given parameters

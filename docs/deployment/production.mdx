@@ -5,7 +5,7 @@ description: "Run mcpjungle as a shared deployment in enterprise mode - for team
 
 This guide covers the production operating model for mcpjungle.
 
-When teams want shared access to MCPs in an enterprise environment, Mcpjungle should run in **enterprise mode** with a dedicated PostgreSQL database
+When teams want shared access to MCPs in an enterprise environment, Mcpjungle should run in **enterprise mode** with a dedicated MySQL 8.0 database
 
 That is the mode intended for teams, internal platforms and organizations running Mcpjungle for shared MCP access.
 
@@ -51,7 +51,7 @@ For a shared deployment, the recommended pattern is:
 
 1. Run the standard `ghcr.io/mcpjungle/mcpjungle:latest` image.
 2. Keep the CLI installed separately on operator machines.
-3. Point Mcpjungle at a separate PostgreSQL instance or cluster.
+3. Point Mcpjungle at a separate MySQL 8.0 instance or cluster.
 
 ## Run with Docker
 
@@ -63,13 +63,13 @@ Supply your database connection string with the `DATABASE_URL` environment varia
 docker run -d \
   --name mcpjungle-server \
   -e SERVER_MODE=enterprise \
-  -e DATABASE_URL=postgres://user:password@your-db-host:5432/mcpjungle \
+  -e DATABASE_URL=mysql://user:password@localhost:3306/mcpjungle \
   -p 8080:8080 \
   ghcr.io/mcpjungle/mcpjungle:latest
 ```
 
 <Tip>
-  For production, deploy a separate managed Postgres cluster and point `DATABASE_URL` at it rather than running Postgres in the same container. See [Configure Mcpjungle's database](/deployment/database) for all database options.
+  For production, deploy a separate managed MySQL 8.0 cluster and point `DATABASE_URL` at it rather than running MySQL in the same container. See [Configure Mcpjungle's database](/deployment/database) for all database options.
 </Tip>
 
 ## Graceful shutdown
@@ -105,7 +105,7 @@ docker stop mcpjungle-server
 
 <CardGroup cols={2}>
   <Card title="Database" icon="database" href="/deployment/database">
-    Configure PostgreSQL correctly for production use.
+    Configure MySQL 8.0 correctly for production use.
   </Card>
   <Card title="Observability" icon="chart-line" href="/deployment/observability">
     Scrape Prometheus-compatible metrics from the `/metrics` endpoint.

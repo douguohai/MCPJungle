@@ -23,9 +23,8 @@ func (s *Server) createUserHandler() gin.HandlerFunc {
 		}
 
 		resp := &types.CreateOrUpdateUserResponse{
-			Username:    newUser.Username,
-			Role:        string(newUser.Role),
-			AccessToken: newUser.AccessToken,
+			Username: newUser.Username,
+			Role:     string(newUser.Role),
 		}
 		c.JSON(http.StatusCreated, resp)
 	}
@@ -42,42 +41,11 @@ func (s *Server) listUsersHandler() gin.HandlerFunc {
 		resp := make([]*types.User, len(users))
 		for i, u := range users {
 			resp[i] = &types.User{
-				Username:       u.Username,
-				Role:           string(u.Role),
-				AllowedServers: u.AllowedServerNames(),
+				Username: u.Username,
+				Role:     string(u.Role),
 			}
 		}
 
-		c.JSON(http.StatusOK, resp)
-	}
-}
-
-func (s *Server) updateUserHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		username := c.Param("username")
-		if username == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
-			return
-		}
-
-		var input model.User
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		input.Username = username
-
-		updatedUser, err := s.userService.UpdateUser(&input)
-		if err != nil {
-			handleServiceError(c, err)
-			return
-		}
-
-		resp := &types.CreateOrUpdateUserResponse{
-			Username:    updatedUser.Username,
-			Role:        string(updatedUser.Role),
-			AccessToken: updatedUser.AccessToken,
-		}
 		c.JSON(http.StatusOK, resp)
 	}
 }

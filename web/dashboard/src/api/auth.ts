@@ -8,10 +8,10 @@ export const authApi = {
       .post<LoginResponse>("/auth/login", { username, password })
       .then((r) => r.data),
 
-  // verify checks whether a token is still valid. Used by App bootstrap to
-  // detect dev mode (no token required) and kept for legacy-token compatibility.
-  verify: (accessToken: string) =>
+  // verify checks whether the current session is still valid. Dev mode always
+  // succeeds; enterprise mode reads the session cookie automatically.
+  verify: () =>
     http
-      .post<VerifyTokenResponse>("/auth/verify", { access_token: accessToken })
+      .post<VerifyTokenResponse>("/auth/verify")
       .then((r) => r.data),
 };

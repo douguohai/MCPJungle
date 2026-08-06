@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewServerConfigService(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	svc := NewServerConfigService(db)
@@ -86,7 +86,7 @@ func TestInitFirstTime(t *testing.T) {
 }
 
 func TestInitIdempotent(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	// Auto-migrate the ServerConfig model

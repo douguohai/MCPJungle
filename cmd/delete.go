@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -13,15 +14,6 @@ var deleteCmd = &cobra.Command{
 		"group": string(subCommandGroupAdvanced),
 		"order": "5",
 	},
-}
-
-var deleteMcpClientCmd = &cobra.Command{
-	Use:   "mcp-client [name]",
-	Args:  cobra.ExactArgs(1),
-	Short: "Delete an MCP client (Enterprise mode)",
-	Long: "Delete an MCP client from the registry. This instantly revokes all access of this client.\n" +
-		"This command is only available in Enterprise mode.",
-	RunE: runDeleteMcpClient,
 }
 
 var deleteUserCmd = &cobra.Command{
@@ -44,21 +36,20 @@ var deleteToolGroupCmd = &cobra.Command{
 	RunE: runDeleteToolGroup,
 }
 
+var deleteDeviceTokenCmd = &cobra.Command{
+	Use:   "device-token [id]",
+	Args:  cobra.ExactArgs(1),
+	Short: "Delete a device token",
+	Long:  "Permanently delete a device token by its ID. This cannot be undone.",
+	RunE:  runDeleteDeviceToken,
+}
+
 func init() {
-	deleteCmd.AddCommand(deleteMcpClientCmd)
 	deleteCmd.AddCommand(deleteUserCmd)
+	deleteCmd.AddCommand(deleteDeviceTokenCmd)
 	deleteCmd.AddCommand(deleteToolGroupCmd)
 
 	rootCmd.AddCommand(deleteCmd)
-}
-
-func runDeleteMcpClient(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	if err := apiClient.DeleteMcpClient(name); err != nil {
-		return fmt.Errorf("failed to delete the client: %w", err)
-	}
-	fmt.Printf("MCP client '%s' deleted successfully (if it existed)!\n", name)
-	return nil
 }
 
 func runDeleteUser(cmd *cobra.Command, args []string) error {
@@ -76,5 +67,17 @@ func runDeleteToolGroup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete the tool group: %w", err)
 	}
 	cmd.Printf("Tool group '%s' deleted successfully!\n", name)
+	return nil
+}
+
+func runDeleteDeviceToken(cmd *cobra.Command, args []string) error {
+	id, err := strconv.ParseUint(args[0], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid token id: %s", args[0])
+	}
+	if err := apiClient.DeleteDeviceToken(uint(id)); err != nil {
+		return fmt.Errorf("failed to delete device token: %w", err)
+	}
+	cmd.Println("Device token deleted successfully")
 	return nil
 }

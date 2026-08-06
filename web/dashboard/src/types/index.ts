@@ -188,7 +188,6 @@ export interface VerifyTokenResponse {
 }
 
 export interface LoginResponse {
-  token: string;
   expires_at: string;
   user: { username: string; role: string };
 }

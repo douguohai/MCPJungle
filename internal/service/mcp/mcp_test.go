@@ -31,7 +31,7 @@ func TestNewMCPService(t *testing.T) {
 			if tt.name == "nil proxy server" {
 				// For this test, we need a real DB but nil proxy server
 				var err error
-				db, err = testhelpers.CreateTestDB()
+				db, err = testhelpers.CreateTestDB(t)
 				testhelpers.AssertNoError(t, err)
 				err = db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.Prompt{}, &model.Resource{})
 				testhelpers.AssertNoError(t, err)
@@ -106,7 +106,7 @@ func TestMCPServiceInitialization(t *testing.T) {
 }
 
 func TestMCPServiceCallbacks(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	// Auto-migrate the required models
@@ -141,7 +141,7 @@ func TestMCPServiceCallbacks(t *testing.T) {
 }
 
 func TestMCPServiceConcurrency(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	// Auto-migrate the required models
@@ -184,7 +184,7 @@ func TestMCPServiceConcurrency(t *testing.T) {
 }
 
 func TestMCPServiceToolInstances(t *testing.T) {
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	// Auto-migrate the required models
@@ -226,7 +226,7 @@ func TestMCPServiceErrorHandling(t *testing.T) {
 	// This would require mocking the database to simulate connection failures
 	// For now, we'll test the basic error handling in the constructor
 
-	db, err := testhelpers.CreateTestDB()
+	db, err := testhelpers.CreateTestDB(t)
 	testhelpers.AssertNoError(t, err)
 
 	// Auto-migrate the required models

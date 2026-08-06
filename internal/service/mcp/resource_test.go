@@ -14,13 +14,12 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
-	"gorm.io/driver/sqlite"
+	"github.com/mcpjungle/mcpjungle/pkg/testhelpers"
 	"gorm.io/gorm"
 )
 
 func setupTestDBWithResources(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := testhelpers.CreateTestDB(t)
 	require.NoError(t, err)
 
 	err = db.AutoMigrate(&model.McpServer{}, &model.Tool{}, &model.Prompt{}, &model.Resource{})
@@ -323,10 +322,7 @@ func TestMCPProxyResourceHandlerEnterpriseRejectsUnauthorizedClient(t *testing.T
 	req := mcp.ReadResourceRequest{}
 	req.Params.URI = buildResourceURI("test-server", "resource://test/status")
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "scoped-client",
-		AllowList: datatypes.JSON(`["other-server"]`),
-	})
+	ctx = context.WithValue(ctx, "effective_services", map[string]bool{"other-server": true})
 
 	_, err := service.mcpProxyResourceHandler(ctx, req)
 	require.Error(t, err)
@@ -395,10 +391,7 @@ func TestMCPProxyResourceHandlerEnterpriseAllowsAuthorizedClient(t *testing.T) {
 	req := mcp.ReadResourceRequest{}
 	req.Params.URI = buildResourceURI("test-server", "resource://test/status")
 	ctx := context.WithValue(context.Background(), "mode", model.ModeEnterprise)
-	ctx = context.WithValue(ctx, "client", &model.McpClient{
-		Name:      "scoped-client",
-		AllowList: datatypes.JSON(`["test-server"]`),
-	})
+	ctx = context.WithValue(ctx, "effective_services", map[string]bool{"test-server": true})
 
 	contents, err := service.mcpProxyResourceHandler(ctx, req)
 	require.NoError(t, err)

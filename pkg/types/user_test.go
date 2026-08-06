@@ -9,22 +9,11 @@ func TestUserRole(t *testing.T) {
 	t.Parallel()
 
 	// Test UserRole constants
-	if UserRoleAdmin != "admin" {
-		t.Errorf("Expected UserRoleAdmin to be 'admin', got %s", UserRoleAdmin)
+	if UserRoleSystemAdmin != "system_admin" {
+		t.Errorf("Expected UserRoleSystemAdmin to be 'system_admin', got %s", UserRoleSystemAdmin)
 	}
-	if UserRoleUser != "user" {
-		t.Errorf("Expected UserRoleUser to be 'user', got %s", UserRoleUser)
-	}
-
-	// Test string conversion
-	adminRole := string(UserRoleAdmin)
-	userRole := string(UserRoleUser)
-
-	if adminRole != "admin" {
-		t.Errorf("Expected adminRole string to be 'admin', got %s", adminRole)
-	}
-	if userRole != "user" {
-		t.Errorf("Expected userRole string to be 'user', got %s", userRole)
+	if UserRoleMember != "member" {
+		t.Errorf("Expected UserRoleMember to be 'member', got %s", UserRoleMember)
 	}
 }
 
@@ -34,14 +23,14 @@ func TestUser(t *testing.T) {
 	// Test struct creation
 	user := User{
 		Username: "testuser",
-		Role:     "user",
+		Role:     "member",
 	}
 
 	if user.Username != "testuser" {
 		t.Errorf("Expected Username to be 'testuser', got %s", user.Username)
 	}
-	if user.Role != "user" {
-		t.Errorf("Expected Role to be 'user', got %s", user.Role)
+	if user.Role != "member" {
+		t.Errorf("Expected Role to be 'member', got %s", user.Role)
 	}
 }
 
@@ -63,7 +52,7 @@ func TestUserJSONMarshaling(t *testing.T) {
 
 	user := User{
 		Username: "testuser",
-		Role:     "admin",
+		Role:     "system_admin",
 	}
 
 	data, err := json.Marshal(user)
@@ -71,7 +60,7 @@ func TestUserJSONMarshaling(t *testing.T) {
 		t.Fatalf("Failed to marshal User: %v", err)
 	}
 
-	expected := `{"username":"testuser","role":"admin"}`
+	expected := `{"username":"testuser","role":"system_admin"}`
 	if string(data) != expected {
 		t.Errorf("Expected JSON %s, got %s", expected, string(data))
 	}
@@ -80,7 +69,7 @@ func TestUserJSONMarshaling(t *testing.T) {
 func TestUserJSONUnmarshaling(t *testing.T) {
 	t.Parallel()
 
-	jsonData := `{"username":"testuser","role":"user"}`
+	jsonData := `{"username":"testuser","role":"member"}`
 	var user User
 
 	err := json.Unmarshal([]byte(jsonData), &user)
@@ -91,8 +80,8 @@ func TestUserJSONUnmarshaling(t *testing.T) {
 	if user.Username != "testuser" {
 		t.Errorf("Expected Username 'testuser', got %s", user.Username)
 	}
-	if user.Role != "user" {
-		t.Errorf("Expected Role 'user', got %s", user.Role)
+	if user.Role != "member" {
+		t.Errorf("Expected Role 'member', got %s", user.Role)
 	}
 }
 
@@ -142,19 +131,15 @@ func TestCreateUserResponse(t *testing.T) {
 
 	// Test struct creation
 	resp := CreateOrUpdateUserResponse{
-		Username:    "newuser",
-		Role:        "user",
-		AccessToken: "token123",
+		Username: "newuser",
+		Role:     "member",
 	}
 
 	if resp.Username != "newuser" {
 		t.Errorf("Expected Username to be 'newuser', got %s", resp.Username)
 	}
-	if resp.Role != "user" {
-		t.Errorf("Expected Role to be 'user', got %s", resp.Role)
-	}
-	if resp.AccessToken != "token123" {
-		t.Errorf("Expected AccessToken to be 'token123', got %s", resp.AccessToken)
+	if resp.Role != "member" {
+		t.Errorf("Expected Role to be 'member', got %s", resp.Role)
 	}
 }
 
@@ -162,9 +147,8 @@ func TestCreateUserResponseJSONMarshaling(t *testing.T) {
 	t.Parallel()
 
 	resp := CreateOrUpdateUserResponse{
-		Username:    "newuser",
-		Role:        "admin",
-		AccessToken: "admin_token_456",
+		Username: "newuser",
+		Role:     "system_admin",
 	}
 
 	data, err := json.Marshal(resp)
@@ -172,7 +156,7 @@ func TestCreateUserResponseJSONMarshaling(t *testing.T) {
 		t.Fatalf("Failed to marshal CreateOrUpdateUserResponse: %v", err)
 	}
 
-	expected := `{"username":"newuser","role":"admin","access_token":"admin_token_456"}`
+	expected := `{"username":"newuser","role":"system_admin"}`
 	if string(data) != expected {
 		t.Errorf("Expected JSON %s, got %s", expected, string(data))
 	}
@@ -181,7 +165,7 @@ func TestCreateUserResponseJSONMarshaling(t *testing.T) {
 func TestCreateUserResponseJSONUnmarshaling(t *testing.T) {
 	t.Parallel()
 
-	jsonData := `{"username":"newuser","role":"user","access_token":"user_token_789"}`
+	jsonData := `{"username":"newuser","role":"member"}`
 	var resp CreateOrUpdateUserResponse
 
 	err := json.Unmarshal([]byte(jsonData), &resp)
@@ -192,10 +176,7 @@ func TestCreateUserResponseJSONUnmarshaling(t *testing.T) {
 	if resp.Username != "newuser" {
 		t.Errorf("Expected Username 'newuser', got %s", resp.Username)
 	}
-	if resp.Role != "user" {
-		t.Errorf("Expected Role 'user', got %s", resp.Role)
-	}
-	if resp.AccessToken != "user_token_789" {
-		t.Errorf("Expected AccessToken 'user_token_789', got %s", resp.AccessToken)
+	if resp.Role != "member" {
+		t.Errorf("Expected Role 'member', got %s", resp.Role)
 	}
 }
