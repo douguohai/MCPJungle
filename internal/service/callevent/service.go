@@ -121,14 +121,15 @@ func (s *Service) AggregateDaily(date string) error {
 
 // ListEventsQuery defines filter criteria for listing call events.
 type ListEventsQuery struct {
-	UserID     uint   // 0 = no filter
-	ServerID   uint   // 0 = no filter
-	ToolName   string // "" = no filter
-	DateFrom   string // YYYY-MM-DD inclusive; "" = no lower bound
-	DateTo     string // YYYY-MM-DD inclusive; "" = no upper bound
-	Result     string // "" = no filter
-	CallType   string // "" = no filter
-	Limit      int    // 0 = use default (200)
+	UserID        uint   // 0 = no filter
+	DeviceTokenID *uint  // nil = no filter
+	ServerID      uint   // 0 = no filter
+	ToolName      string // "" = no filter
+	DateFrom      string // YYYY-MM-DD inclusive; "" = no lower bound
+	DateTo        string // YYYY-MM-DD inclusive; "" = no upper bound
+	Result        string // "" = no filter
+	CallType      string // "" = no filter
+	Limit         int    // 0 = use default (200)
 }
 
 // ListEvents returns call events matching the given filters, ordered newest first.
@@ -136,6 +137,9 @@ func (s *Service) ListEvents(q ListEventsQuery) ([]model.CallEvent, error) {
 	tx := s.db.Model(&model.CallEvent{})
 	if q.UserID > 0 {
 		tx = tx.Where("user_id = ?", q.UserID)
+	}
+	if q.DeviceTokenID != nil {
+		tx = tx.Where("device_token_id = ?", *q.DeviceTokenID)
 	}
 	if q.ServerID > 0 {
 		tx = tx.Where("mcp_service_id = ?", q.ServerID)

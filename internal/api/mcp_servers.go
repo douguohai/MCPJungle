@@ -58,16 +58,18 @@ func (s *Server) registerServerHandler() gin.HandlerFunc {
 			if _, err := s.mcpService.GetMcpServer(input.Name); err == nil {
 				log.Printf("[INFO] force=true: deregistering existing MCP server %s before re-registration", input.Name)
 				if err := s.mcpService.DeregisterMcpServer(input.Name); err != nil {
+					log.Printf("[api] registerServer force deregister: %v", err)
 					c.JSON(
 						http.StatusInternalServerError,
-						gin.H{"error": fmt.Sprintf("Error deregistering existing server with name %s: %v", input.Name, err)},
+						gin.H{"error": "internal server error"},
 					)
 					return
 				}
 			} else if !errors.Is(err, apierrors.ErrNotFound) {
+				log.Printf("[api] registerServer check existing: %v", err)
 				c.JSON(
 					http.StatusInternalServerError,
-					gin.H{"error": fmt.Sprintf("Error checking for existing server with name %s: %v", input.Name, err)},
+					gin.H{"error": "internal server error"},
 				)
 				return
 			}
@@ -210,11 +212,10 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 			case types.TransportStreamableHTTP:
 				conf, err := record.GetStreamableHTTPConfig()
 				if err != nil {
+					log.Printf("[api] listServers streamableHTTP config for %s: %v", record.Name, err)
 					c.JSON(
 						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting streamable HTTP config for server %s: %v", record.Name, err),
-						},
+						gin.H{"error": "internal server error"},
 					)
 					return
 				}
@@ -222,11 +223,10 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 			case types.TransportStdio:
 				conf, err := record.GetStdioConfig()
 				if err != nil {
+					log.Printf("[api] listServers stdio config for %s: %v", record.Name, err)
 					c.JSON(
 						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting stdio config for server %s: %v", record.Name, err),
-						},
+						gin.H{"error": "internal server error"},
 					)
 					return
 				}
@@ -237,11 +237,10 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 				// transport is SSE
 				conf, err := record.GetSSEConfig()
 				if err != nil {
+					log.Printf("[api] listServers SSE config for %s: %v", record.Name, err)
 					c.JSON(
 						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting SSE config for server %s: %v", record.Name, err),
-						},
+						gin.H{"error": "internal server error"},
 					)
 					return
 				}
@@ -306,8 +305,8 @@ func (s *Server) disableServerHandler() gin.HandlerFunc {
 	}
 }
 
-// maskBearerToken returns a masked representation of the bearer token
-// suitable for API responses. If the token is empty, returns empty string.
+// maskBearerToken returns a masked representation of a sensitive token/secret
+// suitable for API responses. If the value is empty, returns empty string.
 func maskBearerToken(token string) string {
 	if token == "" {
 		return ""
@@ -330,6 +329,16 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 			return
 		}
 
+		// Batch-load all upstream OAuth tokens to avoid N+1 queries.
+		serverNames := make([]string, len(records))
+		for i, r := range records {
+			serverNames[i] = r.Name
+		}
+		oauthMap, _ := s.mcpService.ListUpstreamOAuthTokensByNames(serverNames)
+		if oauthMap == nil {
+			oauthMap = make(map[string]*model.UpstreamOAuthToken)
+		}
+
 		servers := make([]*types.RegisterServerInput, len(records))
 
 		for i, record := range records {
@@ -342,21 +351,28 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 
 			switch record.Transport {
 			case types.TransportStreamableHTTP:
-				decConf, _ := mcp.DecryptConfigBearerToken(record.Config)
-				sConf, _ := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetStreamableHTTPConfig()
-				if sConf != nil {
-					servers[i].URL = sConf.URL
-					servers[i].BearerToken = maskBearerToken(sConf.BearerToken)
-					servers[i].Headers = sConf.Headers
+				decConf, decErr := mcp.DecryptConfigBearerToken(record.Config)
+				if decErr != nil {
+					log.Printf("[api] getServerConfigs decrypt config for %s: %v", record.Name, decErr)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					return
 				}
+				sConf, sConfErr := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetStreamableHTTPConfig()
+				if sConfErr != nil {
+					log.Printf("[api] getServerConfigs streamableHTTP config for %s: %v", record.Name, sConfErr)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					return
+				}
+				servers[i].URL = sConf.URL
+				servers[i].BearerToken = maskBearerToken(sConf.BearerToken)
+				servers[i].Headers = sConf.Headers
 			case types.TransportStdio:
 				conf, err := record.GetStdioConfig()
 				if err != nil {
+					log.Printf("[api] getServerConfigs stdio config for %s: %v", record.Name, err)
 					c.JSON(
 						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting stdio config for server %s: %v", record.Name, err),
-						},
+						gin.H{"error": "internal server error"},
 					)
 					return
 				}
@@ -365,24 +381,35 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 				servers[i].Env = conf.Env
 			default:
 				// transport is SSE
-				decConf, _ := mcp.DecryptConfigBearerToken(record.Config)
-				sseConf, _ := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetSSEConfig()
-				if sseConf != nil {
-					servers[i].URL = sseConf.URL
-					servers[i].BearerToken = maskBearerToken(sseConf.BearerToken)
+				decConf, decErr := mcp.DecryptConfigBearerToken(record.Config)
+				if decErr != nil {
+					log.Printf("[api] getServerConfigs decrypt config for %s: %v", record.Name, decErr)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					return
 				}
+				sseConf, sseConfErr := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetSSEConfig()
+				if sseConfErr != nil {
+					log.Printf("[api] getServerConfigs SSE config for %s: %v", record.Name, sseConfErr)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					return
+				}
+				servers[i].URL = sseConf.URL
+				servers[i].BearerToken = maskBearerToken(sseConf.BearerToken)
 			}
 
-			if oauthToken, err := s.mcpService.GetUpstreamOAuthToken(record.Name); err == nil {
+			if oauthToken, exists := oauthMap[record.Name]; exists {
 				servers[i].OAuthRedirectURI = oauthToken.RedirectURI
 				servers[i].OAuthClientID = oauthToken.ClientID
-				servers[i].OAuthClientSecret = oauthToken.ClientSecret
+				servers[i].OAuthClientSecret = maskBearerToken(oauthToken.ClientSecret)
 				scopes, scopeErr := mcp.ScopesFromJSONForAPI(oauthToken.Scopes)
 				if scopeErr == nil {
 					servers[i].OAuthScopes = scopes
 				}
 			}
 		}
+
+		s.recordAuditEvent(c, "server.config_exported", "server", "all",
+			"exported all server configurations")
 
 		c.JSON(http.StatusOK, servers)
 	}

@@ -57,23 +57,25 @@ export default function PermissionGroupsPage() {
   const [addMemberId, setAddMemberId] = useState<number | undefined>();
   const [addServerId, setAddServerId] = useState<number | undefined>();
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
     permissionGroupsApi
-      .list()
+      .list(signal)
       .then(setGroups)
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
   };
 
-  const loadUsersAndServers = () => {
-    usersApi.list().then(setUsers).catch(() => {});
-    serversApi.list().then((r) => setServers(r.servers ?? [])).catch(() => {});
+  const loadUsersAndServers = (signal?: AbortSignal) => {
+    usersApi.list(signal).then(setUsers).catch(() => {});
+    serversApi.list(signal).then((r) => setServers(r.servers ?? [])).catch(() => {});
   };
 
   useEffect(() => {
-    load();
-    loadUsersAndServers();
+    const controller = new AbortController();
+    load(controller.signal);
+    loadUsersAndServers(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !groups.length) return <Spin />;

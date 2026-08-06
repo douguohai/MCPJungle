@@ -14,11 +14,13 @@ export default function ResourcesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     resourcesApi
-      .list()
+      .list(controller.signal)
       .then(setData)
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   if (loading) return <Spin />;

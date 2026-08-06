@@ -22,9 +22,9 @@ export default function ToolCollectionsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<DashboardToolCollection | null>(null);
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
-    Promise.all([toolCollectionsApi.list(), toolsApi.list()])
+    Promise.all([toolCollectionsApi.list(signal), toolsApi.list(signal)])
       .then(([g, t]) => {
         setData(g);
         setToolsData(t.tools ?? []);
@@ -33,7 +33,9 @@ export default function ToolCollectionsPage() {
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !data) return <Spin />;

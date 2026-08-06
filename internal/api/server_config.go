@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,8 @@ func (s *Server) registerInitServerHandler() gin.HandlerFunc {
 		}
 		ok, err := s.configService.Init(req.Mode)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize server: " + err.Error()})
+			log.Printf("[api] initServer: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		if !ok {
@@ -42,9 +44,10 @@ func (s *Server) registerInitServerHandler() gin.HandlerFunc {
 		}
 		admin, err := s.userService.CreateAdminUser(req.AdminUsername, req.AdminPassword)
 		if err != nil {
+			log.Printf("[api] initServer createAdminUser: %v", err)
 			c.JSON(
 				http.StatusInternalServerError,
-				gin.H{"error": "Initialization succeeded but failed to create admin user: " + err.Error()},
+				gin.H{"error": "internal server error"},
 			)
 			return
 		}

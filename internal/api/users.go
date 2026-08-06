@@ -76,6 +76,18 @@ func (s *Server) deleteUserHandler() gin.HandlerFunc {
 	}
 }
 
+func (s *Server) disableUserHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username := c.Param("username")
+		if err := s.userService.DisableUser(username); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		// TODO: when session/token services are wired, revoke all sessions + device tokens here
+		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "disabled"})
+	}
+}
+
 func (s *Server) whoAmIHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		currentUser, exists := c.Get("user")

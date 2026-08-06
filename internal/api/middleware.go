@@ -81,6 +81,10 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "invalid credentials"))
 			return
 		}
+		if user.Status == model.UserStatusDisabled {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "account is disabled"})
+			return
+		}
 		s.userSessionService.Touch(sess.ID)
 		c.Set("user", user)
 		c.Next()

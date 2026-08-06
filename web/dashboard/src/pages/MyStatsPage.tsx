@@ -26,8 +26,9 @@ export default function MyStatsPage() {
   const user = getUser();
 
   useEffect(() => {
+    const controller = new AbortController();
     statsApi
-      .list()
+      .list(controller.signal)
       .then((d) => {
         const myStats = (d.stats ?? []).filter(
           (s) => s.username === user?.username,
@@ -37,6 +38,7 @@ export default function MyStatsPage() {
       })
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   if (loading) return <Spin />;

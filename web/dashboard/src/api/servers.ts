@@ -6,7 +6,7 @@ import type {
 } from "../types";
 
 export const serversApi = {
-  list: () => http.get<DashboardServersResponse>("/servers").then((r) => r.data),
+  list: (signal?: AbortSignal) => http.get<DashboardServersResponse>("/servers", { signal }).then((r) => r.data),
   create: (body: DashboardRegisterServerInput) =>
     http.post<DashboardRegisterServerResponse>("/servers", body).then((r) => r.data),
   remove: (name: string) => http.delete(`/servers/${encodeURIComponent(name)}`),

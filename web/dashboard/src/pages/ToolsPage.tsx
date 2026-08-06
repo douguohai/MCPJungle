@@ -15,16 +15,18 @@ export default function ToolsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [detail, setDetail] = useState<DashboardTool | null>(null);
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
     toolsApi
-      .list()
+      .list(signal)
       .then(setData)
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !data) return <Spin />;
