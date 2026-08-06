@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Menu, Button, Dropdown, theme } from "antd";
+import { Layout, Menu, Button, Dropdown, theme, Tag } from "antd";
 import {
   DashboardOutlined,
   CloudServerOutlined,
@@ -15,6 +15,7 @@ import {
   DesktopOutlined,
   TeamOutlined,
   BarChartOutlined,
+  AuditOutlined,
 } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { clearUser, getUser } from "../store/auth";
@@ -23,7 +24,8 @@ import { overviewApi } from "../api/overview";
 
 const { Header, Sider, Content } = Layout;
 
-const baseMenuItems = [
+// Development mode: show all base pages (no auth concept).
+const devMenuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "概览" },
   { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务器" },
   { key: "/tools", icon: <ToolOutlined />, label: "工具" },
@@ -33,13 +35,60 @@ const baseMenuItems = [
   { key: "/diagnostics", icon: <ApiOutlined />, label: "诊断" },
 ];
 
-// Management pages (MCP clients / users / tokens) only make sense in enterprise
-// mode — dev mode has no auth concepts and the backing /v0 endpoints return 403.
-const adminMenuItems = [
-  { key: "/device-tokens", icon: <DesktopOutlined />, label: "设备令牌" },
-  { key: "/users", icon: <TeamOutlined />, label: "用户" },
-  { key: "/stats", icon: <BarChartOutlined />, label: "调用统计" },
+// system_admin: full management menu
+const systemAdminMenuItems = [
+  { key: "/", icon: <DashboardOutlined />, label: "工作台" },
+  { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务" },
+  { key: "/permission-groups", icon: <GroupOutlined />, label: "权限组" },
+  { key: "/users", icon: <TeamOutlined />, label: "人员" },
+  { key: "/tool-collections", icon: <GroupOutlined />, label: "工具集合" },
+  { key: "/stats", icon: <BarChartOutlined />, label: "调用分析" },
+  { key: "/audit", icon: <AuditOutlined />, label: "审计日志" },
 ];
+
+// service_admin: member pages + management of their services
+const serviceAdminMenuItems = [
+  { key: "/my-services", icon: <CloudServerOutlined />, label: "我的服务" },
+  { key: "/device-tokens", icon: <DesktopOutlined />, label: "我的设备令牌" },
+  { key: "/my-stats", icon: <BarChartOutlined />, label: "我的调用量" },
+  { key: "/servers", icon: <CloudServerOutlined />, label: "MCP 服务" },
+  { key: "/tool-collections", icon: <GroupOutlined />, label: "工具集合" },
+];
+
+// member: personal workspace
+const memberMenuItems = [
+  { key: "/my-services", icon: <CloudServerOutlined />, label: "我的服务" },
+  { key: "/device-tokens", icon: <DesktopOutlined />, label: "我的设备令牌" },
+  { key: "/my-stats", icon: <BarChartOutlined />, label: "我的调用量" },
+];
+
+// auditor: read-only analytics and audit
+const auditorMenuItems = [
+  { key: "/stats", icon: <BarChartOutlined />, label: "调用分析" },
+  { key: "/audit", icon: <AuditOutlined />, label: "审计日志" },
+];
+
+const roleLabels: Record<string, { text: string; color: string }> = {
+  system_admin: { text: "系统管理员", color: "red" },
+  service_admin: { text: "服务管理员", color: "orange" },
+  member: { text: "成员", color: "blue" },
+  auditor: { text: "审计员", color: "purple" },
+};
+
+function getMenuItems(mode: string, role?: string) {
+  if (mode === "development") return devMenuItems;
+  switch (role) {
+    case "system_admin":
+      return systemAdminMenuItems;
+    case "service_admin":
+      return serviceAdminMenuItems;
+    case "auditor":
+      return auditorMenuItems;
+    case "member":
+    default:
+      return memberMenuItems;
+  }
+}
 
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -56,13 +105,15 @@ export default function DashboardLayout() {
       .catch(() => {});
   }, []);
 
-  const items = mode === "development" ? baseMenuItems : [...baseMenuItems, ...adminMenuItems];
+  const items = getMenuItems(mode, user?.role);
 
   const onLogout = async () => {
     try { await http.post("/auth/logout"); } catch {}
     clearUser();
     nav("/login", { replace: true });
   };
+
+  const roleInfo = user?.role ? roleLabels[user.role] : null;
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -105,6 +156,11 @@ export default function DashboardLayout() {
           >
             <Button type="text">
               <UserOutlined /> {user?.username ?? "未登录"}
+              {roleInfo && (
+                <Tag color={roleInfo.color} style={{ marginLeft: 8 }}>
+                  {roleInfo.text}
+                </Tag>
+              )}
             </Button>
           </Dropdown>
         </Header>

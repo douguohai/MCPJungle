@@ -54,9 +54,11 @@ type DashboardServerConfigSummary struct {
 }
 
 type DashboardServer struct {
+	ID                 uint                           `json:"id"`
 	Name               string                       `json:"name"`
 	Transport          string                       `json:"transport"`
 	Status             DashboardServerStatus        `json:"status"`
+	Enabled            bool                         `json:"enabled"`
 	ToolCount          int                          `json:"tool_count"`
 	PromptCount        int                          `json:"prompt_count"`
 	ResourceCount      int                          `json:"resource_count"`

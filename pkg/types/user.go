@@ -12,6 +12,7 @@ const (
 
 // User represents an authenticated, human user in mcpjungle.
 type User struct {
+	ID       uint   `json:"id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 }

@@ -17,6 +17,10 @@ import DiagnosticsPage from "./pages/DiagnosticsPage";
 import DeviceTokensPage from "./pages/DeviceTokensPage";
 import UsersPage from "./pages/UsersPage";
 import StatsPage from "./pages/StatsPage";
+import MyServicesPage from "./pages/MyServicesPage";
+import MyStatsPage from "./pages/MyStatsPage";
+import PermissionGroupsPage from "./pages/PermissionGroupsPage";
+import AuditPage from "./pages/AuditPage";
 
 // On first load, probe the backend. In development mode it lets the dashboard
 // in without a token; in enterprise mode the probe 401s and we show the login
@@ -81,6 +85,10 @@ export default function App() {
         <Route path="device-tokens" element={<DeviceTokensPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="stats" element={<StatsPage />} />
+        <Route path="my-services" element={<MyServicesPage />} />
+        <Route path="my-stats" element={<MyStatsPage />} />
+        <Route path="permission-groups" element={<PermissionGroupsPage />} />
+        <Route path="audit" element={<AuditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

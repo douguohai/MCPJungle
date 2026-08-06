@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
@@ -62,6 +64,65 @@ func (m *MCPService) recordUserCall(ctx context.Context, serverName string) {
 	}
 }
 
+// recordCallEvent writes a CallEvent for analytics.  Best-effort: errors are
+// logged but never returned so that analytics never blocks an MCP call.
+func (m *MCPService) recordCallEvent(event *model.CallEvent) {
+	if m.callEventService == nil {
+		return
+	}
+	if err := m.callEventService.RecordEvent(event); err != nil {
+		log.Printf("[callevent] failed to record call event: %v", err)
+	}
+}
+
+// callEventFromContext extracts user/token metadata from context for building
+// a CallEvent.  Returns zero values in dev mode or when metadata is missing.
+func callEventFromContext(ctx context.Context) (userID, deviceTokenID uint, sourceIP, clientID string) {
+	if dt, ok := ctx.Value("device_token").(*model.DeviceToken); ok && dt != nil {
+		userID = dt.UserID
+		deviceTokenID = dt.ID
+		clientID = dt.ClientID
+	}
+	if u, ok := ctx.Value("user").(*model.User); ok && u != nil && userID == 0 {
+		userID = u.ID
+	}
+	return
+}
+
+// callResultFromError maps an error to a CallEvent result string.
+func callResultFromError(err error) string {
+	if err == nil {
+		return model.CallEventResultSuccess
+	}
+	if errors.Is(err, apierrors.ErrInvalidInput) {
+		return model.CallEventResultPermissionDenied
+	}
+	errMsg := err.Error()
+	if errors.Is(err, context.DeadlineExceeded) {
+		return model.CallEventResultTimeout
+	}
+	if contains(errMsg, "access denied") || contains(errMsg, "not authorized") {
+		return model.CallEventResultPermissionDenied
+	}
+	if contains(errMsg, "disabled") || contains(errMsg, "archived") {
+		return model.CallEventResultServiceDisabled
+	}
+	return model.CallEventResultUpstreamError
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSlow(s, substr))
+}
+
+func containsSlow(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // MCPProxyToolCallHandler handles tool calls for the MCP proxy server
 // by forwarding the request to the appropriate upstream MCP server and
 // relaying the response back.
@@ -82,6 +143,13 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	// Record per-user call count for analytics (only the count, never content).
 	m.recordUserCall(ctx, serverName)
 
+	// Build call event metadata (will be persisted after the upstream call).
+	userID, deviceTokenID, _, clientID := callEventFromContext(ctx)
+	var serverID uint
+	if srv, err := m.GetMcpServer(serverName); err == nil {
+		serverID = srv.ID
+	}
+
 	// Record the tool call metrics at the end of the function
 	defer func() {
 		m.metrics.RecordToolCall(ctx, serverName, toolName, outcome, time.Since(started))
@@ -94,6 +162,23 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 		// server not found is not an internal error, so outcome should be success.
 		outcome = telemetry.ToolCallOutcomeError
 
+		// Record call event for the error case.
+		latency := time.Since(started)
+		m.recordCallEvent(&model.CallEvent{
+			RequestID:         uuid.New().String(),
+			CallTime:          started,
+			UserID:            userID,
+			DeviceTokenID:     deviceTokenID,
+			McpServiceID:      serverID,
+			ToolName:          toolName,
+			CallType:          "tool",
+			Result:            callResultFromError(err),
+			LatencyMs:         latency.Milliseconds(),
+			UpstreamLatencyMs: 0,
+			ErrorCode:         "server_not_found",
+			ClientID:          clientID,
+		})
+
 		return nil, fmt.Errorf(
 			"failed to get details about MCP server %s from DB: %w", serverName, err,
 		)
@@ -102,6 +187,23 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	session, err := m.getSession(ctx, server)
 	if err != nil {
 		outcome = telemetry.ToolCallOutcomeError
+
+		latency := time.Since(started)
+		m.recordCallEvent(&model.CallEvent{
+			RequestID:         uuid.New().String(),
+			CallTime:          started,
+			UserID:            userID,
+			DeviceTokenID:     deviceTokenID,
+			McpServiceID:      serverID,
+			ToolName:          toolName,
+			CallType:          "tool",
+			Result:            callResultFromError(err),
+			LatencyMs:         latency.Milliseconds(),
+			UpstreamLatencyMs: 0,
+			ErrorCode:         "session_error",
+			ClientID:          clientID,
+		})
+
 		return nil, err
 	}
 	defer session.closeIfApplicable()
@@ -112,11 +214,29 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 	// See https://github.com/mcpjungle/MCPJungle/issues/252
 	request.Header = nil
 
+	upstreamStart := time.Now()
 	res, err := session.client.CallTool(ctx, request)
+	upstreamLatency := time.Since(upstreamStart)
 	if err != nil {
 		outcome = telemetry.ToolCallOutcomeError
 		session.invalidateOnError(err) // Invalidate unhealthy stateful sessions
 	}
+
+	// Record call event (best-effort).
+	totalLatency := time.Since(started)
+	m.recordCallEvent(&model.CallEvent{
+		RequestID:         uuid.New().String(),
+		CallTime:          started,
+		UserID:            userID,
+		DeviceTokenID:     deviceTokenID,
+		McpServiceID:      serverID,
+		ToolName:          toolName,
+		CallType:          "tool",
+		Result:            callResultFromError(err),
+		LatencyMs:         totalLatency.Milliseconds(),
+		UpstreamLatencyMs: upstreamLatency.Milliseconds(),
+		ClientID:          clientID,
+	})
 
 	// forward the request to the upstream MCP server and relay the response back
 	return res, err
@@ -126,6 +246,8 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 // by forwarding the request to the appropriate upstream MCP server and
 // relaying the response back.
 func (m *MCPService) mcpProxyResourceHandler(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	started := time.Now()
+
 	// get the upstream mcp server and original resource uri for the requested resource uri
 	resource, err := m.GetResource(request.Params.URI)
 	if err != nil {
@@ -136,8 +258,26 @@ func (m *MCPService) mcpProxyResourceHandler(ctx context.Context, request mcp.Re
 		return nil, err
 	}
 
+	userID, deviceTokenID, _, clientID := callEventFromContext(ctx)
+	serverID := resource.Server.ID
+	resourceName := request.Params.URI
+
 	session, err := m.getSession(ctx, &resource.Server)
 	if err != nil {
+		latency := time.Since(started)
+		m.recordCallEvent(&model.CallEvent{
+			RequestID:     uuid.New().String(),
+			CallTime:      started,
+			UserID:        userID,
+			DeviceTokenID: deviceTokenID,
+			McpServiceID:  serverID,
+			ToolName:      resourceName,
+			CallType:      "resource",
+			Result:        callResultFromError(err),
+			LatencyMs:     latency.Milliseconds(),
+			ErrorCode:     "session_error",
+			ClientID:      clientID,
+		})
 		return nil, err
 	}
 	defer session.closeIfApplicable()
@@ -147,9 +287,30 @@ func (m *MCPService) mcpProxyResourceHandler(ctx context.Context, request mcp.Re
 	// Do not let any client-sent headers get forwarded to the upstream MCP server.
 	request.Header = nil
 
+	upstreamStart := time.Now()
 	res, err := session.client.ReadResource(ctx, request)
+	upstreamLatency := time.Since(upstreamStart)
 	if err != nil {
 		session.invalidateOnError(err)
+	}
+
+	// Record call event (best-effort).
+	totalLatency := time.Since(started)
+	m.recordCallEvent(&model.CallEvent{
+		RequestID:         uuid.New().String(),
+		CallTime:          started,
+		UserID:            userID,
+		DeviceTokenID:     deviceTokenID,
+		McpServiceID:      serverID,
+		ToolName:          resourceName,
+		CallType:          "resource",
+		Result:            callResultFromError(err),
+		LatencyMs:         totalLatency.Milliseconds(),
+		UpstreamLatencyMs: upstreamLatency.Milliseconds(),
+		ClientID:          clientID,
+	})
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -173,6 +334,13 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 		return nil, err
 	}
 
+	// Build call event metadata.
+	userID, deviceTokenID, _, clientID := callEventFromContext(ctx)
+	var serverID uint
+	if srv, err := m.GetMcpServer(serverName); err == nil {
+		serverID = srv.ID
+	}
+
 	// Record the prompt call metrics at the end of the function
 	defer func() {
 		m.metrics.RecordPromptCall(ctx, serverName, promptName, outcome, time.Since(started))
@@ -185,6 +353,21 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 		// server not found is not an internal error, so outcome should be success.
 		outcome = telemetry.PromptCallOutcomeError
 
+		latency := time.Since(started)
+		m.recordCallEvent(&model.CallEvent{
+			RequestID:     uuid.New().String(),
+			CallTime:      started,
+			UserID:        userID,
+			DeviceTokenID: deviceTokenID,
+			McpServiceID:  serverID,
+			ToolName:      promptName,
+			CallType:      "prompt",
+			Result:        callResultFromError(err),
+			LatencyMs:     latency.Milliseconds(),
+			ErrorCode:     "server_not_found",
+			ClientID:      clientID,
+		})
+
 		return nil, fmt.Errorf(
 			"failed to get details about MCP server %s from DB: %w", serverName, err,
 		)
@@ -193,6 +376,22 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 	session, err := m.getSession(ctx, server)
 	if err != nil {
 		outcome = telemetry.PromptCallOutcomeError
+
+		latency := time.Since(started)
+		m.recordCallEvent(&model.CallEvent{
+			RequestID:     uuid.New().String(),
+			CallTime:      started,
+			UserID:        userID,
+			DeviceTokenID: deviceTokenID,
+			McpServiceID:  serverID,
+			ToolName:      promptName,
+			CallType:      "prompt",
+			Result:        callResultFromError(err),
+			LatencyMs:     latency.Milliseconds(),
+			ErrorCode:     "session_error",
+			ClientID:      clientID,
+		})
+
 		return nil, err
 	}
 	defer session.closeIfApplicable()
@@ -203,11 +402,29 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 	request.Header = nil
 
 	// forward the request to the upstream MCP server and relay the response back
+	upstreamStart := time.Now()
 	res, err := session.client.GetPrompt(ctx, request)
+	upstreamLatency := time.Since(upstreamStart)
 	if err != nil {
 		outcome = telemetry.PromptCallOutcomeError
 		session.invalidateOnError(err) // Invalidate unhealthy stateful sessions
 	}
+
+	// Record call event (best-effort).
+	totalLatency := time.Since(started)
+	m.recordCallEvent(&model.CallEvent{
+		RequestID:         uuid.New().String(),
+		CallTime:          started,
+		UserID:            userID,
+		DeviceTokenID:     deviceTokenID,
+		McpServiceID:      serverID,
+		ToolName:          promptName,
+		CallType:          "prompt",
+		Result:            callResultFromError(err),
+		LatencyMs:         totalLatency.Milliseconds(),
+		UpstreamLatencyMs: upstreamLatency.Milliseconds(),
+		ClientID:          clientID,
+	})
 
 	return res, err
 }

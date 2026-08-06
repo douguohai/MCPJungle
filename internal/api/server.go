@@ -12,6 +12,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
+	"github.com/mcpjungle/mcpjungle/internal/service/callevent"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
@@ -58,6 +60,12 @@ type ServerOptions struct {
 	// PermissionService manages permission groups and user effective services.
 	PermissionService *permission.Service
 	DeviceTokenService *devicetoken.Service
+
+	// CallEventService records detailed MCP call events for analytics.
+	CallEventService *callevent.Service
+
+	// AuditEventService records administrative audit events.
+	AuditEventService *auditevent.Service
 }
 
 // Server represents the MCPJungle registry server that handles MCP proxy and API requests
@@ -80,6 +88,9 @@ type Server struct {
 	userSessionService *usersession.Service
 	permissionService  *permission.Service
 	deviceTokenService  *devicetoken.Service
+
+	callEventService   *callevent.Service
+	auditEventService  *auditevent.Service
 
 	// collectionSseServers keeps track of mcp-go's server.SSEServer instances created for each tool collection.
 	// These instances serve the requests made to tool collections' SSE tools.
@@ -122,6 +133,8 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 		userSessionService:   opts.UserSessionService,
 		permissionService:   opts.PermissionService,
 		deviceTokenService:  opts.DeviceTokenService,
+		callEventService:    opts.CallEventService,
+		auditEventService:   opts.AuditEventService,
 		dashboardOAuthResults: make(map[string]dashboardOAuthSessionResult),
 	}
 
@@ -319,6 +332,18 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.POST("/prompts/render", s.getPromptWithArgsHandler())
 
 		userAPI.GET("/users/whoami", requireEnterpriseMode, s.whoAmIHandler())
+
+		// Analytics: call event details, daily aggregates, and summaries.
+		// Handlers apply role-based filtering internally.
+		userAPI.GET("/analytics/events", s.listCallEventsHandler())
+		userAPI.GET("/analytics/daily", s.listDailyAggregatesHandler())
+		userAPI.GET("/analytics/summary", s.callSummaryHandler())
+	}
+
+	// Audit events: only system_admin and auditor roles (handler enforces).
+	auditAPI := apiV0.Group("/")
+	{
+		auditAPI.GET("/audit-events", s.listAuditEventsHandler())
 	}
 
 	// endpoints only accessible by an admin user in enterprise mode or anyone in development mode

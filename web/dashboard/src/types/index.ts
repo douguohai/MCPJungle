@@ -35,6 +35,7 @@ export interface DashboardServerConfigSummary {
 }
 
 export interface DashboardServer {
+  id: number;
   name: string;
   transport: string;
   enabled: boolean;
@@ -219,6 +220,7 @@ export interface CreateUserResponse {
 }
 
 export interface UserListItem {
+  id: number;
   username: string;
   role: string;
   allowed_servers?: string[] | null;

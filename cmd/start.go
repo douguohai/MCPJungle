@@ -21,6 +21,8 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/db"
 	"github.com/mcpjungle/mcpjungle/internal/migrations"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
+	"github.com/mcpjungle/mcpjungle/internal/service/callevent"
 	"github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
@@ -425,6 +427,8 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		InitReqTimeoutSec: timeout,
 	})
 
+	callEventService := callevent.NewService(dbConn)
+
 	mcpServiceConfig := &mcp.ServiceConfig{
 		DB:                      dbConn,
 		McpProxyServer:          mcpProxyServer,
@@ -432,6 +436,7 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		Metrics:                 mcpMetrics,
 		McpServerInitReqTimeout: timeout,
 		SessionManager:          sessionManager,
+		CallEventService:        callEventService,
 	}
 	mcpService, err := mcp.NewMCPService(mcpServiceConfig)
 	if err != nil {
@@ -455,6 +460,7 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 	userSessionService := usersession.NewService(dbConn)
 	permissionService := permission.NewService(dbConn)
 	deviceTokenService := devicetoken.NewService(dbConn)
+	auditEventService := auditevent.NewService(dbConn)
 
 	// create the API server
 	opts := &api.ServerOptions{
@@ -470,6 +476,8 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 		UserSessionService: userSessionService,
 		PermissionService:  permissionService,
 		DeviceTokenService: deviceTokenService,
+		CallEventService:   callEventService,
+		AuditEventService:  auditEventService,
 	}
 	s, err := api.NewServer(opts)
 	if err != nil {

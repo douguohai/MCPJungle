@@ -60,7 +60,7 @@ func TestUserJSONMarshaling(t *testing.T) {
 		t.Fatalf("Failed to marshal User: %v", err)
 	}
 
-	expected := `{"username":"testuser","role":"system_admin"}`
+	expected := `{"id":0,"username":"testuser","role":"system_admin"}`
 	if string(data) != expected {
 		t.Errorf("Expected JSON %s, got %s", expected, string(data))
 	}
