@@ -389,6 +389,11 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 			requireEnterpriseMode,
 			s.deleteUserHandler(),
 		)
+		adminAPI.POST(
+			"/users/:username/disable",
+			requireEnterpriseMode,
+			s.disableUserHandler(),
+		)
 
 		// endpoints for managing tool collections
 		adminAPI.POST("/tool-collections", s.createToolCollectionHandler())

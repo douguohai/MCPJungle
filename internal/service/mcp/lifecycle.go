@@ -341,7 +341,9 @@ func (m *MCPService) ValidateServer(ctx context.Context, serverID uint, useStore
 			errSummary = errSummary[:1000]
 		}
 		s.LastErrorSummary = errSummary
-		_ = m.db.Save(s).Error
+		if saveErr := m.db.Save(s).Error; saveErr != nil {
+			log.Printf("[lifecycle] failed to persist validation_failed status for server %s: %v", s.Name, saveErr)
+		}
 		return fmt.Errorf("validation failed: %w", err)
 	}
 

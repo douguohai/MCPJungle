@@ -31,10 +31,10 @@ export default function DeviceTokensPage() {
   const [submitting, setSubmitting] = useState(false);
   const [createForm] = Form.useForm();
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
     deviceTokensApi
-      .list()
+      .list(signal)
       .then((ts) => {
         setData(ts);
         setError("");
@@ -43,7 +43,9 @@ export default function DeviceTokensPage() {
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !data.length) return <Spin />;
@@ -72,6 +74,10 @@ export default function DeviceTokensPage() {
       setCreatedToken(res.raw_token);
       setCreateOpen(false);
       createForm.resetFields();
+      // Persist raw token so MyServicesPage can use it for config generation.
+      try {
+        sessionStorage.setItem(`device_token_raw_${res.token.id}`, res.raw_token);
+      } catch { /* quota exceeded, ignore */ }
       load();
     } catch (e) {
       message.error(extractError(e));

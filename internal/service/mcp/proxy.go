@@ -17,7 +17,10 @@ import (
 )
 
 func (m *MCPService) authorizeProxyServerAccess(ctx context.Context, serverName string) error {
-	serverMode := ctx.Value("mode").(model.ServerMode)
+	serverMode, ok := ctx.Value("mode").(model.ServerMode)
+	if !ok {
+		return fmt.Errorf("missing server mode in context")
+	}
 	if !model.IsEnterpriseMode(serverMode) {
 		return nil
 	}

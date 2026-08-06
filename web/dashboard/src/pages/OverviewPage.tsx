@@ -12,11 +12,13 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     overviewApi
-      .get()
+      .get(controller.signal)
       .then(setData)
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   if (loading) return <Spin />;

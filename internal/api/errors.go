@@ -2,9 +2,12 @@ package api
 
 import (
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
@@ -26,5 +29,33 @@ func handleServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
-	c.JSON(http.StatusInternalServerError, types.APIErrorResponse{Error: err.Error()})
+	// Catch-all: log detailed error, return generic message to client.
+	log.Printf("[api] unhandled error: %v", err)
+	c.JSON(http.StatusInternalServerError, types.APIErrorResponse{Error: "internal server error"})
+}
+
+// recordAuditEvent is a best-effort helper that persists an audit event.
+// If the audit service is nil or the write fails, only a log message is emitted;
+// the caller's operation is never blocked.
+func (s *Server) recordAuditEvent(c *gin.Context, actionType, targetType, targetID, changeSummary string) {
+	if s.auditEventService == nil {
+		return
+	}
+	var actorID uint
+	if u := currentUser(c); u != nil {
+		actorID = u.ID
+	}
+	event := &model.AuditEvent{
+		ActorUserID:   actorID,
+		ActionType:    actionType,
+		TargetType:    targetType,
+		TargetID:      targetID,
+		OccurredAt:    time.Now().UTC(),
+		SourceIP:      c.ClientIP(),
+		Result:        "success",
+		ChangeSummary: changeSummary,
+	}
+	if err := s.auditEventService.RecordEvent(event); err != nil {
+		log.Printf("[audit] failed to record event %s: %v", actionType, err)
+	}
 }

@@ -52,16 +52,16 @@ func TestHandleServiceError(t *testing.T) {
 			expectedBody:   "invalid access token",
 		},
 		{
-			name:           "unrelated error returns 500",
+			name:           "unrelated error returns 500 with generic message",
 			err:            errors.New("db connection refused"),
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "db connection refused",
+			expectedBody:   "internal server error",
 		},
 		{
-			name:           "wrapped unrelated error returns 500",
+			name:           "wrapped unrelated error returns 500 with generic message",
 			err:            fmt.Errorf("operation failed: %w", errors.New("disk full")),
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "disk full",
+			expectedBody:   "internal server error",
 		},
 	}
 

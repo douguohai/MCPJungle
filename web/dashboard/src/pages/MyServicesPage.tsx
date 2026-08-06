@@ -27,11 +27,13 @@ export default function MyServicesPage() {
   const [servers, setServers] = useState<DashboardServer[]>([]);
   const [tokens, setTokens] = useState<DeviceToken[]>([]);
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [selectedRawToken, setSelectedRawToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([serversApi.list(), deviceTokensApi.list()])
+    const controller = new AbortController();
+    Promise.all([serversApi.list(controller.signal), deviceTokensApi.list(controller.signal)])
       .then(([s, t]) => {
         setServers(
           (s.servers ?? []).filter(
@@ -45,6 +47,7 @@ export default function MyServicesPage() {
       })
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   if (loading) return <Spin />;
@@ -59,6 +62,9 @@ export default function MyServicesPage() {
   const generateConfig = (serverName: string) => {
     if (!selectedToken) return "";
     const tokenObj = tokens.find((t) => t.token_prefix?.startsWith(selectedToken) || String(t.id) === selectedToken);
+    // Retrieve raw token from sessionStorage (stored at creation time in DeviceTokensPage).
+    const tokenId = tokenObj ? String(tokenObj.id) : selectedToken;
+    const rawToken = selectedRawToken || sessionStorage.getItem(`device_token_raw_${tokenId}`) || "<your-device-token>";
     // Generate a Cursor / Claude Desktop compatible MCP configuration
     return JSON.stringify(
       {
@@ -66,7 +72,7 @@ export default function MyServicesPage() {
           mcpjungle: {
             url: `${window.location.origin}/mcp`,
             headers: {
-              Authorization: `Bearer <your-device-token>`,
+              Authorization: `Bearer ${rawToken}`,
             },
           },
         },
@@ -100,7 +106,16 @@ export default function MyServicesPage() {
                 placeholder="选择一个活跃的设备令牌"
                 allowClear
                 value={selectedToken}
-                onChange={setSelectedToken}
+                onChange={(val) => {
+                  setSelectedToken(val);
+                  if (val) {
+                    const tk = tokens.find((t) => String(t.id) === val);
+                    const id = tk ? String(tk.id) : val;
+                    setSelectedRawToken(sessionStorage.getItem(`device_token_raw_${id}`));
+                  } else {
+                    setSelectedRawToken(null);
+                  }
+                }}
                 options={tokens.map((t) => ({
                   value: String(t.id),
                   label: `${t.name} (${t.token_prefix}...)`,
@@ -203,9 +218,12 @@ export default function MyServicesPage() {
         >
           <Typography.Paragraph type="secondary">
             将以下配置粘贴到你的 AI 客户端（如 Cursor Settings、Claude Desktop config）的
-            MCP servers 配置中。请将{" "}
-            <Typography.Text code>{`<your-device-token>`}</Typography.Text>{" "}
-            替换为实际的设备令牌。
+            MCP servers 配置中。
+            {selectedRawToken
+              ? " 令牌已自动填入。"
+              : (<>请将{" "}
+                <Typography.Text code>{`<your-device-token>`}</Typography.Text>{" "}
+                替换为实际的设备令牌（仅创建时可见）。</>)}
           </Typography.Paragraph>
           <Typography.Paragraph
             code

@@ -40,8 +40,8 @@ export interface PermissionGroupService {
 }
 
 export const permissionGroupsApi = {
-  list: () =>
-    http.get<PermissionGroup[]>("/permission-groups").then((r) => r.data),
+  list: (signal?: AbortSignal) =>
+    http.get<PermissionGroup[]>("/permission-groups", { signal }).then((r) => r.data),
   get: (id: number) =>
     http.get<PermissionGroupDetail>(`/permission-groups/${id}`).then((r) => r.data),
   create: (body: { name: string; display_name?: string; description?: string }) =>

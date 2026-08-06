@@ -2,5 +2,5 @@ import { http } from "./client";
 import type { CallStatsResponse } from "../types";
 
 export const statsApi = {
-  list: () => http.get<CallStatsResponse>("/stats").then((r) => r.data),
+  list: (signal?: AbortSignal) => http.get<CallStatsResponse>("/stats", { signal }).then((r) => r.data),
 };

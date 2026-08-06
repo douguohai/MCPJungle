@@ -9,11 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	mcpgoclient "github.com/mark3labs/mcp-go/client"
 	mcpgotransport "github.com/mark3labs/mcp-go/client/transport"
+	"github.com/mcpjungle/mcpjungle/internal/encryption"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
@@ -26,6 +29,47 @@ import (
 const upstreamOAuthPendingSessionTTL = 10 * time.Minute
 
 var errUpstreamOAuthDCRUnsupported = errors.New("upstream OAuth provider does not support dynamic client registration")
+
+// encryptedFieldPrefix is prepended to encrypted values stored in the DB so
+// that decryption can distinguish ciphertext from legacy plaintext.
+const encryptedFieldPrefix = "enc:"
+
+// encryptOAuthField encrypts a sensitive field value using the configured
+// master key. If no master key is configured (dev mode), the plaintext is
+// returned unchanged with a warning log.
+func encryptOAuthField(plaintext string) string {
+	if plaintext == "" {
+		return ""
+	}
+	if !encryption.IsSet() {
+		log.Printf("[WARN] encryption master key not set; storing OAuth secret in plaintext")
+		return plaintext
+	}
+	encrypted, err := encryption.Encrypt(plaintext)
+	if err != nil {
+		log.Printf("[ERROR] failed to encrypt OAuth field: %v", err)
+		return plaintext
+	}
+	return encryptedFieldPrefix + encrypted
+}
+
+// decryptOAuthField decrypts a sensitive field value. If the value was stored
+// without encryption (no prefix or no master key), it is returned as-is.
+func decryptOAuthField(stored string) string {
+	if stored == "" {
+		return ""
+	}
+	if !strings.HasPrefix(stored, encryptedFieldPrefix) {
+		return stored // legacy plaintext
+	}
+	ciphertext := stored[len(encryptedFieldPrefix):]
+	decrypted, err := encryption.Decrypt(ciphertext)
+	if err != nil {
+		log.Printf("[ERROR] failed to decrypt OAuth field: %v", err)
+		return stored
+	}
+	return decrypted
+}
 
 func upstreamOAuthDCRUnsupportedUserError() error {
 	return fmt.Errorf(
@@ -70,9 +114,9 @@ func (s *upstreamOAuthTokenStore) GetToken(ctx context.Context) (*mcpgotransport
 	}
 
 	return &mcpgotransport.Token{
-		AccessToken:  record.AccessToken,
+		AccessToken:  decryptOAuthField(record.AccessToken),
 		TokenType:    record.TokenType,
-		RefreshToken: record.RefreshToken,
+		RefreshToken: decryptOAuthField(record.RefreshToken),
 		Scope:        record.Scope,
 		ExpiresAt:    record.ExpiresAt,
 	}, nil
@@ -88,9 +132,9 @@ func (s *upstreamOAuthTokenStore) SaveToken(ctx context.Context, token *mcpgotra
 	record := &model.UpstreamOAuthToken{
 		ServerName:   s.serverName,
 		Transport:    s.transport,
-		AccessToken:  token.AccessToken,
+		AccessToken:  encryptOAuthField(token.AccessToken),
 		TokenType:    token.TokenType,
-		RefreshToken: token.RefreshToken,
+		RefreshToken: encryptOAuthField(token.RefreshToken),
 		Scope:        token.Scope,
 		ExpiresAt:    token.ExpiresAt,
 	}
@@ -106,9 +150,9 @@ func (s *upstreamOAuthTokenStore) SaveToken(ctx context.Context, token *mcpgotra
 		}
 
 		existing.Transport = s.transport
-		existing.AccessToken = token.AccessToken
+		existing.AccessToken = encryptOAuthField(token.AccessToken)
 		existing.TokenType = token.TokenType
-		existing.RefreshToken = token.RefreshToken
+		existing.RefreshToken = encryptOAuthField(token.RefreshToken)
 		existing.Scope = token.Scope
 		existing.ExpiresAt = token.ExpiresAt
 		return tx.Save(&existing).Error
@@ -208,7 +252,7 @@ func (m *MCPService) persistOAuthTokenMetadata(ctx context.Context, serverName s
 				Transport:    transport,
 				RedirectURI:  redirectURI,
 				ClientID:     clientID,
-				ClientSecret: clientSecret,
+				ClientSecret: encryptOAuthField(clientSecret),
 				Scopes:       scopesToJSON(scopes),
 			}
 			return tx.Create(&record).Error
@@ -220,7 +264,7 @@ func (m *MCPService) persistOAuthTokenMetadata(ctx context.Context, serverName s
 		record.Transport = transport
 		record.RedirectURI = redirectURI
 		record.ClientID = clientID
-		record.ClientSecret = clientSecret
+		record.ClientSecret = encryptOAuthField(clientSecret)
 		record.Scopes = scopesToJSON(scopes)
 		return tx.Save(&record).Error
 	})
@@ -355,10 +399,10 @@ func (m *MCPService) bootstrapUpstreamOAuth(ctx context.Context, input *types.Re
 			Force:        force,
 			RedirectURI:  input.OAuthRedirectURI,
 			ClientID:     clientID,
-			ClientSecret: clientSecret,
+			ClientSecret: encryptOAuthField(clientSecret),
 			Scopes:       scopesToJSON(input.OAuthScopes),
 			State:        state,
-			CodeVerifier: codeVerifier,
+			CodeVerifier: encryptOAuthField(codeVerifier),
 			ExpiresAt:    expiresAt,
 			InitiatedBy:  initiatedBy,
 		}
@@ -555,7 +599,7 @@ func (m *MCPService) CompleteUpstreamOAuthSession(ctx context.Context, sessionID
 
 	input.OAuthRedirectURI = session.RedirectURI
 	input.OAuthClientID = session.ClientID
-	input.OAuthClientSecret = session.ClientSecret
+	input.OAuthClientSecret = decryptOAuthField(session.ClientSecret)
 	scopes, err := scopesFromJSON(session.Scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode stored OAuth scopes: %w", err)
@@ -571,7 +615,8 @@ func (m *MCPService) CompleteUpstreamOAuthSession(ctx context.Context, sessionID
 		return nil, fmt.Errorf("failed to persist OAuth client metadata: %w", err)
 	}
 
-	if err := m.processOAuthAuthorizationCode(ctx, server, &input, session.CodeVerifier, state, code); err != nil {
+	decryptedCodeVerifier := decryptOAuthField(session.CodeVerifier)
+	if err := m.processOAuthAuthorizationCode(ctx, server, &input, decryptedCodeVerifier, state, code); err != nil {
 		return nil, err
 	}
 
@@ -714,6 +759,27 @@ func (m *MCPService) GetUpstreamOAuthToken(serverName string) (*model.UpstreamOA
 	return getStoredUpstreamOAuthToken(m.db, serverName)
 }
 
+// ListUpstreamOAuthTokensByNames batch-loads upstream OAuth token records for the
+// given server names, returning a map keyed by server_name. Servers without OAuth
+// tokens are simply absent from the map.
+func (m *MCPService) ListUpstreamOAuthTokensByNames(serverNames []string) (map[string]*model.UpstreamOAuthToken, error) {
+	if len(serverNames) == 0 {
+		return nil, nil
+	}
+	var records []model.UpstreamOAuthToken
+	if err := m.db.Where("server_name IN ?", serverNames).Find(&records).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[string]*model.UpstreamOAuthToken, len(records))
+	for i := range records {
+		records[i].ClientSecret = decryptOAuthField(records[i].ClientSecret)
+		records[i].AccessToken = decryptOAuthField(records[i].AccessToken)
+		records[i].RefreshToken = decryptOAuthField(records[i].RefreshToken)
+		result[records[i].ServerName] = &records[i]
+	}
+	return result, nil
+}
+
 // getStoredUpstreamOAuthToken loads the stored upstream OAuth token record for a server.
 func getStoredUpstreamOAuthToken(db *gorm.DB, serverName string) (*model.UpstreamOAuthToken, error) {
 	var record model.UpstreamOAuthToken
@@ -723,5 +789,9 @@ func getStoredUpstreamOAuthToken(db *gorm.DB, serverName string) (*model.Upstrea
 		}
 		return nil, err
 	}
+	// Decrypt sensitive fields that were stored encrypted at rest.
+	record.ClientSecret = decryptOAuthField(record.ClientSecret)
+	record.AccessToken = decryptOAuthField(record.AccessToken)
+	record.RefreshToken = decryptOAuthField(record.RefreshToken)
 	return &record, nil
 }

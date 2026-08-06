@@ -195,6 +195,11 @@ func (sm *SessionManager) startCleanupRoutine() {
 	sm.cleanupTicker = time.NewTicker(time.Duration(sessionCleanupIntervalSec) * time.Second)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[SessionManager] recovered from panic in cleanup routine: %v", r)
+			}
+		}()
 		for {
 			select {
 			case <-sm.cleanupTicker.C:

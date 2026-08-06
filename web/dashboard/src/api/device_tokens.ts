@@ -16,7 +16,7 @@ export interface CreateDeviceTokenResponse {
 }
 
 export const deviceTokensApi = {
-  list: () => http.get<DeviceToken[]>("/device-tokens").then((r) => r.data),
+  list: (signal?: AbortSignal) => http.get<DeviceToken[]>("/device-tokens", { signal }).then((r) => r.data),
   create: (body: {
     name: string;
     scope_mode: string;

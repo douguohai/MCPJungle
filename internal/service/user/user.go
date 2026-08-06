@@ -38,6 +38,7 @@ func (u *UserService) CreateAdminUser(username, password string) (*model.User, e
 		Username:     username,
 		Role:         types.UserRoleSystemAdmin,
 		PasswordHash: string(hash),
+		Status:       model.UserStatusActive,
 	}
 	if err := u.db.Create(&user).Error; err != nil {
 		return nil, fmt.Errorf("failed to create admin user: %w", err)
@@ -144,6 +145,23 @@ func (u *UserService) DeleteUser(username string) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 	return nil
+}
+
+// DisableUser deactivates the user account, setting its status to "disabled".
+// System admin accounts cannot be disabled. Once disabled, all existing sessions
+// and device tokens should be revoked by the caller (design doc §6.2 / §18.2).
+func (u *UserService) DisableUser(username string) error {
+	var user model.User
+	if err := u.db.Where("username = ?", username).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("user not found: %w", apierrors.ErrNotFound)
+		}
+		return err
+	}
+	if user.Role == types.UserRoleSystemAdmin {
+		return fmt.Errorf("cannot disable a system admin: %w", apierrors.ErrInvalidInput)
+	}
+	return u.db.Model(&model.User{}).Where("id = ?", user.ID).Update("status", model.UserStatusDisabled).Error
 }
 
 // UserCallStatView is one row of per-user per-server call counts for the stats page.

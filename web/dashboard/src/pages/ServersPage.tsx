@@ -17,16 +17,18 @@ export default function ServersPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
     serversApi
-      .list()
+      .list(signal)
       .then(setData)
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !data) return <Spin />;

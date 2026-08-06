@@ -41,6 +41,16 @@ func (s *Server) listCallEventsHandler() gin.HandlerFunc {
 			q.ServerID = uint(id)
 		}
 
+		if v := c.Query("device_token_id"); v != "" {
+			id, err := strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device_token_id"})
+				return
+			}
+			tokenID := uint(id)
+			q.DeviceTokenID = &tokenID
+		}
+
 		if v := c.Query("limit"); v != "" {
 			limit, err := strconv.Atoi(v)
 			if err != nil {

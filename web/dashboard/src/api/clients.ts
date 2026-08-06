@@ -6,7 +6,7 @@ import type { McpClient, CreateClientInput } from "../types";
 const v0 = { baseURL: "/api/v0" };
 
 export const clientsApi = {
-  list: () => http.get<McpClient[]>("/clients", v0).then((r) => r.data),
+  list: (signal?: AbortSignal) => http.get<McpClient[]>("/clients", { ...v0, signal }).then((r) => r.data),
   create: (body: CreateClientInput) =>
     http.post<McpClient>("/clients", body, v0).then((r) => r.data),
   update: (name: string, body: Partial<CreateClientInput>) =>

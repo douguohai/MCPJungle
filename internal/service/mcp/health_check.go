@@ -51,7 +51,14 @@ func (m *MCPService) runHealthChecks(ctx context.Context, cfg HealthCheckConfig)
 	for _, srv := range servers {
 		// Run each check in its own goroutine so one slow server doesn't block others.
 		s := srv // capture loop variable
-		go m.checkOneServer(ctx, s, cfg)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[health] recovered from panic in health check for %s: %v", s.Name, r)
+				}
+			}()
+			m.checkOneServer(ctx, s, cfg)
+		}()
 	}
 }
 

@@ -21,9 +21,9 @@ export default function ClientsPage() {
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  const load = () => {
+  const load = (signal?: AbortSignal) => {
     setLoading(true);
-    Promise.all([clientsApi.list(), serversApi.list()])
+    Promise.all([clientsApi.list(signal), serversApi.list(signal)])
       .then(([cs, ss]) => {
         setData(cs);
         setServers(ss.servers ?? []);
@@ -33,7 +33,9 @@ export default function ClientsPage() {
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   if (loading && !data.length) return <Spin />;

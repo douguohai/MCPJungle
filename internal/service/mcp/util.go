@@ -350,6 +350,11 @@ func captureStdioServerStderr(name string, c *client.Client) {
 	stdioTransport := c.GetTransport().(*transport.Stdio)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("['%s' MCP Server] recovered from panic in stderr capture: %v", name, r)
+			}
+		}()
 		buf := make([]byte, 4096) // 4KB buffer for reading stderr
 		for {
 			n, err := stdioTransport.Stderr().Read(buf)

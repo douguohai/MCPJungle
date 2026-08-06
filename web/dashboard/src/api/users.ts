@@ -4,7 +4,7 @@ import type { UserListItem, CreateUserResponse } from "../types";
 const v0 = { baseURL: "/api/v0" };
 
 export const usersApi = {
-  list: () => http.get<UserListItem[]>("/users", v0).then((r) => r.data),
+  list: (signal?: AbortSignal) => http.get<UserListItem[]>("/users", { ...v0, signal }).then((r) => r.data),
   create: (body: { username: string; access_token?: string }) =>
     http.post<CreateUserResponse>("/users", body, v0).then((r) => r.data),
   update: (username: string, body: { allowed_servers?: string[] }) =>

@@ -11,14 +11,16 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     statsApi
-      .list()
+      .list(controller.signal)
       .then((d) => {
         setRows(d.stats ?? []);
         setError("");
       })
       .catch((e) => setError(extractError(e)))
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   if (loading) return <Spin />;

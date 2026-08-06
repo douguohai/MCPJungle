@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -20,7 +21,8 @@ func (s *Server) listDeviceTokensHandler() gin.HandlerFunc {
 		}
 		tokens, err := s.deviceTokenService.List(u.ID, u.Role)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("[api] listDeviceTokens: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, tokens)
