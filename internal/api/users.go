@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,9 @@ func (s *Server) createUserHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "user.created", "user", fmt.Sprintf("%d", newUser.ID),
+			fmt.Sprintf("created user %s with role %s", newUser.Username, newUser.Role))
 
 		resp := &types.CreateOrUpdateUserResponse{
 			Username: newUser.Username,
@@ -64,6 +68,9 @@ func (s *Server) deleteUserHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "user.deleted", "user", username,
+			fmt.Sprintf("deleted user %s", username))
 
 		c.Status(http.StatusNoContent)
 	}

@@ -135,7 +135,7 @@ func TestVerifyUserAuthForAPIAccess(t *testing.T) {
 			mode:           model.ModeEnterprise,
 			sessionToken:   "",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   `{"error":"invalid credentials"}`,
+			expectedBody:   `{"code":"UNAUTHENTICATED","error":"invalid credentials"}`,
 		},
 	}
 
@@ -400,14 +400,14 @@ func TestCheckAuthForMcpProxyAccess(t *testing.T) {
 			mode:           model.ModeEnterprise,
 			authHeader:     "",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   `{"error":"missing device token"}`,
+			expectedBody:   `{"code":"UNAUTHENTICATED","error":"missing device token"}`,
 		},
 		{
 			name:           "enterprise mode - invalid token",
 			mode:           model.ModeEnterprise,
 			authHeader:     "Bearer mcpdt_999_badtoken",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   `{"error":"invalid device token"}`,
+			expectedBody:   `{"code":"UNAUTHENTICATED","error":"invalid device token"}`,
 		},
 	}
 

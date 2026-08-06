@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -40,6 +41,10 @@ func (s *Server) createPermissionGroupHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.created", "permission_group", fmt.Sprintf("%d", g.ID),
+			fmt.Sprintf("created permission group %s", g.Name))
+
 		c.JSON(http.StatusCreated, g)
 	}
 }
@@ -101,6 +106,10 @@ func (s *Server) disablePermissionGroupHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.disabled", "permission_group", fmt.Sprintf("%d", id),
+			fmt.Sprintf("disabled permission group %d", id))
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -129,6 +138,10 @@ func (s *Server) addPermissionGroupMemberHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.member_added", "permission_group", fmt.Sprintf("%d", gid),
+			fmt.Sprintf("added user %d to permission group %d", r.UserID, gid))
+
 		c.JSON(http.StatusCreated, gin.H{"ok": true})
 	}
 }
@@ -149,6 +162,10 @@ func (s *Server) removePermissionGroupMemberHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.member_removed", "permission_group", fmt.Sprintf("%d", gid),
+			fmt.Sprintf("removed user %d from permission group %d", uid, gid))
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -177,6 +194,10 @@ func (s *Server) addPermissionGroupServiceHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.service_granted", "permission_group", fmt.Sprintf("%d", gid),
+			fmt.Sprintf("granted service %d to permission group %d", r.McpServerID, gid))
+
 		c.JSON(http.StatusCreated, gin.H{"ok": true})
 	}
 }
@@ -197,6 +218,10 @@ func (s *Server) removePermissionGroupServiceHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "permission_group.service_revoked", "permission_group", fmt.Sprintf("%d", gid),
+			fmt.Sprintf("revoked service %d from permission group %d", sid, gid))
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }

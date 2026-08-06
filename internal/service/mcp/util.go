@@ -279,6 +279,15 @@ func createHTTPMcpServerConn(
 		return nil, fmt.Errorf("failed to get streamable HTTP config for MCP server %s: %w", s.Name, err)
 	}
 
+	// Decrypt bearer_token if encryption is configured (design doc §9.5).
+	decConfig, err := DecryptConfigBearerToken(s.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt bearer_token for MCP server %s: %w", s.Name, err)
+	}
+	if decConf, err := (&model.McpServer{Transport: s.Transport, Config: decConfig}).GetStreamableHTTPConfig(); err == nil {
+		conf.BearerToken = decConf.BearerToken
+	}
+
 	opts := prepareSHTTPClientOptions(s.Name, conf)
 
 	var c *client.Client
@@ -445,6 +454,15 @@ func createSSEMcpServerConn(
 	conf, err := s.GetSSEConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get SSE transport config for MCP server %s: %w", s.Name, err)
+	}
+
+	// Decrypt bearer_token if encryption is configured (design doc §9.5).
+	decConfig, err := DecryptConfigBearerToken(s.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt bearer_token for MCP server %s: %w", s.Name, err)
+	}
+	if decConf, err := (&model.McpServer{Transport: s.Transport, Config: decConfig}).GetSSEConfig(); err == nil {
+		conf.BearerToken = decConf.BearerToken
 	}
 
 	var (

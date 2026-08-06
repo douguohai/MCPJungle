@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
@@ -72,12 +73,12 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 
 		sess, err := s.userSessionService.Lookup(sessionFromRequest(c))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "invalid credentials"))
 			return
 		}
 		user, err := s.userService.GetUserByID(sess.UserID)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "invalid credentials"))
 			return
 		}
 		s.userSessionService.Touch(sess.ID)
@@ -203,12 +204,12 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 
 		rawToken := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
 		if rawToken == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing device token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "missing device token"))
 			return
 		}
 		deviceToken, err := s.deviceTokenService.GetByToken(rawToken)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid device token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "invalid device token"))
 			return
 		}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/datatypes"
 )
@@ -283,11 +284,18 @@ func (m *MCPService) CreateDraftServer(
 	if sessionMode == "" {
 		sessionMode = types.SessionModeStateless
 	}
+
+	// Encrypt bearer_token in config JSON before persisting (design doc §9.5).
+	encConfig, err := EncryptConfigBearerToken(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt bearer_token: %w", err)
+	}
+
 	s := &model.McpServer{
 		Name:        name,
 		Description: description,
 		Transport:   transport,
-		Config:      config,
+		Config:      encConfig,
 		SessionMode: sessionMode,
 		Status:      model.StatusDraft,
 		Slug:        slugify(name),
@@ -475,6 +483,39 @@ func (m *MCPService) UpdateServerConfig(serverID uint, newConfig model.McpServer
 		return fmt.Errorf("failed to update server config: %w", err)
 	}
 	return nil
+}
+
+// CheckManagerPermission checks whether the user identified by (userID, role)
+// is authorized to modify the MCP server identified by serverID.
+//
+//   - system_admin: always allowed (returns nil).
+//   - service_admin: allowed only if a McpServiceManager record exists for
+//     (serverID, userID).
+//   - any other role: denied.
+//
+// In dev mode (userID == 0 / no authenticated user) the check is skipped.
+func (m *MCPService) CheckManagerPermission(serverID uint, userID uint, role types.UserRole) error {
+	// Dev mode: no user → no enforcement.
+	if userID == 0 {
+		return nil
+	}
+	switch role {
+	case types.UserRoleSystemAdmin:
+		return nil
+	case types.UserRoleServiceAdmin:
+		var count int64
+		if err := m.db.Model(&model.McpServiceManager{}).
+			Where("mcp_server_id = ? AND user_id = ?", serverID, userID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("check manager permission: %w", err)
+		}
+		if count == 0 {
+			return fmt.Errorf("user %d is not a manager of server %d: %w", userID, serverID, apierrors.ErrForbidden)
+		}
+		return nil
+	default:
+		return fmt.Errorf("role %q is not authorized to modify servers: %w", role, apierrors.ErrForbidden)
+	}
 }
 
 // AddManager assigns a user as a manager (primary or backup) of an MCP server.

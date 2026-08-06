@@ -14,6 +14,25 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
+// checkServerAccess enforces design doc 18.6: a service_admin may only
+// modify servers they manage. system_admin passes through; dev mode (no user)
+// passes through.
+func (s *Server) checkServerAccess(c *gin.Context, serverID uint) bool {
+	u := currentUser(c)
+	if u == nil {
+		return true // dev mode — no user context
+	}
+	if err := s.mcpService.CheckManagerPermission(serverID, u.ID, u.Role); err != nil {
+		if errors.Is(err, apierrors.ErrForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "you are not authorized to modify this server"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check permission"})
+		}
+		return false
+	}
+	return true
+}
+
 func (s *Server) registerServerHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		force, err := parseForceQueryParam(c)
@@ -244,6 +263,9 @@ func (s *Server) enableServerHandler() gin.HandlerFunc {
 			return
 		}
 
+		s.recordAuditEvent(c, "server.enabled", "mcp_server", name,
+			fmt.Sprintf("enabled server %s (tools: %d, prompts: %d)", name, len(tools), len(prompts)))
+
 		result := types.EnableDisableServerResult{
 			Name:            name,
 			ToolsAffected:   tools,
@@ -257,11 +279,23 @@ func (s *Server) disableServerHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
 
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		if !s.checkServerAccess(c, server.ID) {
+			return
+		}
+
 		tools, prompts, err := s.mcpService.DisableMcpServer(name)
 		if err != nil {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "server.disabled", "mcp_server", name,
+			fmt.Sprintf("disabled server %s (tools: %d, prompts: %d)", name, len(tools), len(prompts)))
 
 		result := types.EnableDisableServerResult{
 			Name:            name,
@@ -270,6 +304,18 @@ func (s *Server) disableServerHandler() gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, result)
 	}
+}
+
+// maskBearerToken returns a masked representation of the bearer token
+// suitable for API responses. If the token is empty, returns empty string.
+func maskBearerToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	if len(token) > 4 {
+		return "***" + token[len(token)-4:]
+	}
+	return "***"
 }
 
 // getServerConfigsHandler returns the configurations of all registered MCP servers.
@@ -296,19 +342,13 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 
 			switch record.Transport {
 			case types.TransportStreamableHTTP:
-				conf, err := record.GetStreamableHTTPConfig()
-				if err != nil {
-					c.JSON(
-						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting streamable HTTP config for server %s: %v", record.Name, err),
-						},
-					)
-					return
+				decConf, _ := mcp.DecryptConfigBearerToken(record.Config)
+				sConf, _ := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetStreamableHTTPConfig()
+				if sConf != nil {
+					servers[i].URL = sConf.URL
+					servers[i].BearerToken = maskBearerToken(sConf.BearerToken)
+					servers[i].Headers = sConf.Headers
 				}
-				servers[i].URL = conf.URL
-				servers[i].BearerToken = conf.BearerToken
-				servers[i].Headers = conf.Headers
 			case types.TransportStdio:
 				conf, err := record.GetStdioConfig()
 				if err != nil {
@@ -325,18 +365,12 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 				servers[i].Env = conf.Env
 			default:
 				// transport is SSE
-				conf, err := record.GetSSEConfig()
-				if err != nil {
-					c.JSON(
-						http.StatusInternalServerError,
-						gin.H{
-							"error": fmt.Sprintf("Error getting SSE config for server %s: %v", record.Name, err),
-						},
-					)
-					return
+				decConf, _ := mcp.DecryptConfigBearerToken(record.Config)
+				sseConf, _ := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetSSEConfig()
+				if sseConf != nil {
+					servers[i].URL = sseConf.URL
+					servers[i].BearerToken = maskBearerToken(sseConf.BearerToken)
 				}
-				servers[i].URL = conf.URL
-				servers[i].BearerToken = conf.BearerToken
 			}
 
 			if oauthToken, err := s.mcpService.GetUpstreamOAuthToken(record.Name); err == nil {
@@ -416,10 +450,17 @@ func (s *Server) validateServerHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+		if !s.checkServerAccess(c, server.ID) {
+			return
+		}
 		if err := s.mcpService.ValidateServer(c, server.ID, false); err != nil {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "server.validated", "mcp_server", name,
+			fmt.Sprintf("triggered validation for server %s", name))
+
 		c.JSON(http.StatusOK, gin.H{"status": model.StatusValidating})
 	}
 }
@@ -433,10 +474,17 @@ func (s *Server) publishServerHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+		if !s.checkServerAccess(c, server.ID) {
+			return
+		}
 		if err := s.mcpService.PublishServer(server.ID); err != nil {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "server.published", "mcp_server", name,
+			fmt.Sprintf("published server %s to online", name))
+
 		c.JSON(http.StatusOK, gin.H{"status": model.StatusOnline})
 	}
 }
@@ -445,10 +493,22 @@ func (s *Server) publishServerHandler() gin.HandlerFunc {
 func (s *Server) archiveServerHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
+		server, err := s.mcpService.GetMcpServer(name)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		if !s.checkServerAccess(c, server.ID) {
+			return
+		}
 		if err := s.mcpService.ArchiveServer(name); err != nil {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "server.archived", "mcp_server", name,
+			fmt.Sprintf("archived server %s", name))
+
 		c.JSON(http.StatusOK, gin.H{"status": model.StatusArchived})
 	}
 }
@@ -479,6 +539,9 @@ func (s *Server) addServerManagerHandler() gin.HandlerFunc {
 			return
 		}
 
+		s.recordAuditEvent(c, "server.manager_added", "mcp_server", name,
+			fmt.Sprintf("added manager user %d (role %s) to server %s", input.UserID, input.RoleType, name))
+
 		c.JSON(http.StatusCreated, gin.H{"server_id": server.ID, "user_id": input.UserID, "role_type": input.RoleType})
 	}
 }
@@ -504,6 +567,9 @@ func (s *Server) removeServerManagerHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "server.manager_removed", "mcp_server", name,
+			fmt.Sprintf("removed manager user %d from server %s", userID, name))
 
 		c.Status(http.StatusNoContent)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
+	"github.com/mcpjungle/mcpjungle/pkg/apierrors"
 )
 
 const sessionCookieName = "mcpjungle_session"
@@ -49,7 +50,7 @@ func (s *Server) dashboardLoginHandler() gin.HandlerFunc {
 		}
 		user, err := s.userService.VerifyPassword(req.Username, req.Password)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			c.JSON(http.StatusUnauthorized, apierrors.NewAPIError(apierrors.CodeUnauthenticated, "invalid credentials"))
 			return
 		}
 		rawID, sess, err := s.userSessionService.Create(user.ID, c.ClientIP(), hashUA(c.GetHeader("User-Agent")), usersession.DefaultSessionTTL)

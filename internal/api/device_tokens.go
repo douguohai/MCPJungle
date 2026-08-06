@@ -64,6 +64,10 @@ func (s *Server) createDeviceTokenHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "device_token.created", "device_token", fmt.Sprintf("%d", tok.ID),
+			fmt.Sprintf("created device token %s for user %d", r.Name, u.ID))
+
 		// The raw token is returned exactly once; the response contains both the
 		// raw value (for the user to copy) and the token record (for display).
 		c.JSON(http.StatusCreated, gin.H{
@@ -109,6 +113,10 @@ func (s *Server) revokeDeviceTokenHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "device_token.revoked", "device_token", fmt.Sprintf("%d", tid),
+			fmt.Sprintf("revoked device token %d", tid))
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -129,6 +137,10 @@ func (s *Server) deleteDeviceTokenHandler() gin.HandlerFunc {
 			handleServiceError(c, err)
 			return
 		}
+
+		s.recordAuditEvent(c, "device_token.deleted", "device_token", fmt.Sprintf("%d", tid),
+			fmt.Sprintf("deleted device token %d", tid))
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }

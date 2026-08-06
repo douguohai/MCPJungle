@@ -19,6 +19,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/api"
 	"github.com/mcpjungle/mcpjungle/internal/db"
+	"github.com/mcpjungle/mcpjungle/internal/encryption"
 	"github.com/mcpjungle/mcpjungle/internal/migrations"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
@@ -66,6 +67,10 @@ const (
 
 	// SessionIdleTimeoutSecondsDefault is the default idle timeout in seconds for stateful sessions.
 	SessionIdleTimeoutSecondsDefault = -1
+
+	// MasterKeyEnvVar is the environment variable for the AES-256 master key used
+	// to encrypt sensitive fields (bearer tokens) at rest (design doc §9.5).
+	MasterKeyEnvVar = "MCPHUB_MASTER_KEY"
 )
 
 var (
@@ -338,6 +343,23 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 	desiredServerMode, err := getDesiredServerMode(cmd)
 	if err != nil {
 		return err
+	}
+
+	// Validate MCPHUB_MASTER_KEY (design doc §9.5).
+	// Enterprise mode requires the master key; dev mode makes it optional.
+	masterKey := os.Getenv(MasterKeyEnvVar)
+	if desiredServerMode == model.ModeEnterprise && masterKey == "" {
+		return fmt.Errorf(
+			"%s environment variable must be set in enterprise mode"+
+				" (hex-encoded 32-byte AES-256 key)",
+			MasterKeyEnvVar,
+		)
+	}
+	if masterKey != "" {
+		if err := encryption.SetMasterKey(masterKey); err != nil {
+			return fmt.Errorf("invalid %s: %w", MasterKeyEnvVar, err)
+		}
+		log.Printf("[server] %s configured — bearer tokens will be encrypted at rest\n", MasterKeyEnvVar)
 	}
 
 	// Initialize metrics if enabled
