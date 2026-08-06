@@ -47,7 +47,6 @@ func TestE2E_EnterpriseMode_RegularUser_CannotWrite(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/v0/servers", map[string]any{"name": "x", "transport": "stdio", "command": "echo"}},
 		{http.MethodPost, "/api/v0/tool-groups", map[string]any{"name": "g"}},
-		{http.MethodPost, "/api/v0/clients", map[string]any{"name": "c"}},
 		{http.MethodPost, "/api/v0/users", map[string]any{"username": "u"}},
 	}
 	for _, op := range writeOps {
@@ -60,22 +59,26 @@ func TestE2E_EnterpriseMode_RegularUser_CannotWrite(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Enterprise mode – admin manages MCP clients (enterprise-only)
+// Enterprise mode – admin manages device tokens (enterprise-only)
 // -----------------------------------------------------------------------
 
-func TestE2E_EnterpriseMode_AdminManagesClients(t *testing.T) {
+func TestE2E_EnterpriseMode_AdminManagesDeviceTokens(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
-	resp := env.do(t, http.MethodPost, "/api/v0/clients",
-		map[string]any{"name": "myapp", "allow_list": []string{"*"}}, env.adminToken)
+	// Create a device token
+	resp := env.do(t, http.MethodPost, "/api/dashboard/device-tokens",
+		map[string]any{"name": "myapp", "scope_mode": "inherit_all"}, env.adminToken)
 	defer drain(resp)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var created map[string]any
 	decodeJSON(t, resp, &created)
-	assert.Equal(t, "myapp", created["name"])
-	assert.NotEmpty(t, created["access_token"])
+	assert.NotEmpty(t, created["raw_token"])
+	token, ok := created["token"].(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, "myapp", token["name"])
 
-	resp = env.do(t, http.MethodGet, "/api/v0/clients", nil, env.adminToken)
+	// List device tokens
+	resp = env.do(t, http.MethodGet, "/api/dashboard/device-tokens", nil, env.adminToken)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	drain(resp)
 }
@@ -85,24 +88,27 @@ func TestE2E_EnterpriseMode_AdminManagesClients(t *testing.T) {
 // -----------------------------------------------------------------------
 
 // TestE2E_EnterpriseMode_McpProxy_RequiresClientToken verifies that only a
-// valid MCP client token (not a user/admin token) grants access to /mcp.
+// valid device token (not a user/admin session token) grants access to /mcp.
 func TestE2E_EnterpriseMode_McpProxy_RequiresClientToken(t *testing.T) {
 	env := setupE2EServer(t, model.ModeEnterprise)
 
+	// user/admin session tokens must NOT grant /mcp access (only device tokens do)
 	for _, token := range []string{"", env.userToken, env.adminToken} {
 		resp := env.do(t, http.MethodGet, "/mcp", nil, token)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		drain(resp)
 	}
 
-	clientToken := createMcpClient(t, env, "auth-client", []string{"*"})
-	resp := env.do(t, http.MethodGet, "/mcp", nil, clientToken)
-	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode, "valid client token must not return 401")
+	// Device token must grant /mcp access
+	dtToken := createDeviceToken(t, env, "auth-token", "inherit_all", nil)
+	resp := env.do(t, http.MethodGet, "/mcp", nil, dtToken)
+	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode, "valid device token must not return 401")
 	drain(resp)
 }
 
 // TestE2E_EnterpriseMode_McpProxy_AllowList_ListAndInvoke registers two servers
-// (svc-a and svc-b) and creates a client restricted to svc-a only.
+// (svc-a and svc-b) and creates a device token restricted to svc-a only via
+// the restricted scope mode.
 //
 // Tools:
 //   - ListTools returns only svc-a tools, not svc-b tools
@@ -119,8 +125,9 @@ func TestE2E_EnterpriseMode_McpProxy_AllowList_ListAndInvoke(t *testing.T) {
 	registerEverythingServerAs(t, env, "svc-a", env.adminToken)
 	registerEverythingServerAs(t, env, "svc-b", env.adminToken)
 
-	// Client is restricted to svc-a only.
-	c := newMCPProxyClient(t, env, createMcpClient(t, env, "scoped-client", []string{"svc-a"}))
+	// Create a restricted device token (only svc-a)
+	dtToken := createDeviceToken(t, env, "scoped-token", "restricted", []string{"svc-a"})
+	c := newMCPProxyClient(t, env, dtToken)
 
 	// --- Tools ---
 
@@ -245,7 +252,7 @@ func TestE2E_EnterpriseMode_McpProxy_StripsInboundHeadersForUpstreamCalls(t *tes
 	defer drain(resp)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	clientToken := createMcpClient(t, env, "header-proxy-client", []string{"header-proxy"})
+	clientToken := createDeviceToken(t, env, "header-proxy-token", "inherit_all", nil)
 	c, err := client.NewStreamableHttpClient(env.baseURL+"/mcp", transport.WithHTTPHeaders(map[string]string{
 		"Authorization":  "Bearer " + clientToken,
 		"X-Test-Forward": "downstream-custom-header",

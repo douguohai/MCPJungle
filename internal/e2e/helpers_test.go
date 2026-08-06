@@ -32,7 +32,9 @@ import (
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	configSvc "github.com/mcpjungle/mcpjungle/internal/service/config"
 	"github.com/mcpjungle/mcpjungle/internal/service/dashboard"
+	"github.com/mcpjungle/mcpjungle/internal/service/devicetoken"
 	mcpSvc "github.com/mcpjungle/mcpjungle/internal/service/mcp"
+	"github.com/mcpjungle/mcpjungle/internal/service/permission"
 	"github.com/mcpjungle/mcpjungle/internal/service/toolgroup"
 	userSvc "github.com/mcpjungle/mcpjungle/internal/service/user"
 	"github.com/mcpjungle/mcpjungle/internal/service/usersession"
@@ -150,15 +152,17 @@ func setupE2EServer(t *testing.T, mode model.ServerMode) *e2eEnv {
 	require.NoError(t, err)
 
 	apiServer, err := api.NewServer(&api.ServerOptions{
-		MCPProxyServer:     mcpProxy,
-		SseMcpProxyServer:  sseMcpProxy,
-		MCPService:         mcpService,
-		ConfigService:      cfgSvc,
-		DashboardService:   dashboard.NewService(db, false),
-		UserService:        usrSvc,
-		ToolGroupService:   tgSvc,
-		Metrics:            telemetry.NewNoopCustomMetrics(),
-		UserSessionService: sessSvc,
+		MCPProxyServer:      mcpProxy,
+		SseMcpProxyServer:   sseMcpProxy,
+		MCPService:          mcpService,
+		ConfigService:       cfgSvc,
+		DashboardService:    dashboard.NewService(db, false),
+		UserService:         usrSvc,
+		ToolGroupService:    tgSvc,
+		Metrics:             telemetry.NewNoopCustomMetrics(),
+		UserSessionService:  sessSvc,
+		DeviceTokenService:  devicetoken.NewService(db),
+		PermissionService:   permission.NewService(db),
 	})
 	require.NoError(t, err)
 
@@ -246,21 +250,24 @@ func promptNames(prompts []map[string]any) []string {
 	return names
 }
 
-// createMcpClient creates an MCP client with the given allow list and returns its access token.
-func createMcpClient(t *testing.T, env *e2eEnv, name string, allowList []string) string {
+// createDeviceToken creates a device token with the given scope mode and
+// restricted server names, returning the raw token string.
+func createDeviceToken(t *testing.T, env *e2eEnv, name string, scopeMode string, restrictedServerNames []string) string {
 	t.Helper()
-	resp := env.do(t, http.MethodPost, "/api/v0/clients", map[string]any{
-		"name":       name,
-		"allow_list": allowList,
-	}, env.adminToken)
+	body := map[string]any{
+		"name":                    name,
+		"scope_mode":              scopeMode,
+		"restricted_server_names": restrictedServerNames,
+	}
+	resp := env.do(t, http.MethodPost, "/api/dashboard/device-tokens", body, env.adminToken)
 	defer drain(resp)
-	require.Equal(t, http.StatusCreated, resp.StatusCode, "create MCP client %q", name)
-	var mcpClient map[string]any
-	decodeJSON(t, resp, &mcpClient)
-	token, ok := mcpClient["access_token"].(string)
-	require.True(t, ok, "access_token must be a string")
-	require.NotEmpty(t, token)
-	return token
+	require.Equal(t, http.StatusCreated, resp.StatusCode, "create device token %q", name)
+	var result map[string]any
+	decodeJSON(t, resp, &result)
+	rawToken, ok := result["raw_token"].(string)
+	require.True(t, ok, "raw_token must be a string")
+	require.NotEmpty(t, rawToken)
+	return rawToken
 }
 
 // newMCPProxyClient creates an initialized StreamableHTTP MCP client that
