@@ -1,0 +1,33 @@
+# Go
+*.exe
+*.test
+*.out
+mcpjungle
+dist/
+
+# Node
+web/dashboard/node_modules/
+web/dashboard/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.github/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Docs
+*.md
+specs/
