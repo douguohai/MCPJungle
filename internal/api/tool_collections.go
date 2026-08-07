@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -49,7 +49,7 @@ func (s *Server) listToolCollectionsHandler() gin.HandlerFunc {
 
 			collTools, err := coll.GetTools()
 			if err != nil {
-				log.Printf("[api] listToolCollections GetTools for %s: %v", coll.Name, err)
+				slog.Error("listToolCollections GetTools failed", "collection", coll.Name, "error", err)
 				c.JSON(
 					http.StatusInternalServerError,
 					gin.H{"error": "internal server error"},
@@ -60,7 +60,7 @@ func (s *Server) listToolCollectionsHandler() gin.HandlerFunc {
 
 			collServers, err := coll.GetServers()
 			if err != nil {
-				log.Printf("[api] listToolCollections GetServers for %s: %v", coll.Name, err)
+				slog.Error("listToolCollections GetServers failed", "collection", coll.Name, "error", err)
 				c.JSON(
 					http.StatusInternalServerError,
 					gin.H{"error": "internal server error"},
@@ -71,7 +71,7 @@ func (s *Server) listToolCollectionsHandler() gin.HandlerFunc {
 
 			collExcluded, err := coll.GetExcludedTools()
 			if err != nil {
-				log.Printf("[api] listToolCollections GetExcludedTools for %s: %v", coll.Name, err)
+				slog.Error("listToolCollections GetExcludedTools failed", "collection", coll.Name, "error", err)
 				c.JSON(
 					http.StatusInternalServerError,
 					gin.H{"error": "internal server error"},
@@ -111,7 +111,7 @@ func (s *Server) getToolCollectionHandler() gin.HandlerFunc {
 		var tools []string
 		tools, err = collection.GetTools()
 		if err != nil {
-			log.Printf("[api] getToolCollection GetTools for %s: %v", name, err)
+			slog.Error("getToolCollection GetTools failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -124,7 +124,7 @@ func (s *Server) getToolCollectionHandler() gin.HandlerFunc {
 		var servers []string
 		servers, err = collection.GetServers()
 		if err != nil {
-			log.Printf("[api] getToolCollection GetServers for %s: %v", name, err)
+			slog.Error("getToolCollection GetServers failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -137,7 +137,7 @@ func (s *Server) getToolCollectionHandler() gin.HandlerFunc {
 		var excludedTools []string
 		excludedTools, err = collection.GetExcludedTools()
 		if err != nil {
-			log.Printf("[api] getToolCollection GetExcludedTools for %s: %v", name, err)
+			slog.Error("getToolCollection GetExcludedTools failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -225,7 +225,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var origTools []string
 		origTools, err = originalConf.GetTools()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetTools orig for %s: %v", name, err)
+			slog.Error("updateToolCollection GetTools orig failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -237,7 +237,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var origServers []string
 		origServers, err = originalConf.GetServers()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetServers orig for %s: %v", name, err)
+			slog.Error("updateToolCollection GetServers orig failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -249,7 +249,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var origExcluded []string
 		origExcluded, err = originalConf.GetExcludedTools()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetExcludedTools orig for %s: %v", name, err)
+			slog.Error("updateToolCollection GetExcludedTools orig failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -261,7 +261,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var newTools []string
 		newTools, err = input.GetTools()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetTools new for %s: %v", name, err)
+			slog.Error("updateToolCollection GetTools new failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -273,7 +273,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var newServers []string
 		newServers, err = input.GetServers()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetServers new for %s: %v", name, err)
+			slog.Error("updateToolCollection GetServers new failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},
@@ -285,7 +285,7 @@ func (s *Server) updateToolCollectionHandler() gin.HandlerFunc {
 		var newExcluded []string
 		newExcluded, err = input.GetExcludedTools()
 		if err != nil {
-			log.Printf("[api] updateToolCollection GetExcludedTools new for %s: %v", name, err)
+			slog.Error("updateToolCollection GetExcludedTools new failed", "collection", name, "error", err)
 			c.JSON(
 				http.StatusInternalServerError,
 				gin.H{"error": "internal server error"},

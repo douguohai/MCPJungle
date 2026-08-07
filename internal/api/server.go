@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/dashboardui"
+	"github.com/mcpjungle/mcpjungle/internal/middleware"
 	"github.com/mcpjungle/mcpjungle/internal/model"
 	"github.com/mcpjungle/mcpjungle/internal/service/auditevent"
 	"github.com/mcpjungle/mcpjungle/internal/service/callevent"
@@ -192,7 +193,18 @@ func (s *Server) Router() http.Handler {
 // setupRouter sets up the Gin router with the MCP proxy server and API endpoints.
 func (s *Server) setupRouter() (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(gin.Logger())
+
+	// --- Production security middleware ---
+	// CORS: allow cross-origin requests (configurable per deployment).
+	r.Use(middleware.CORSMiddleware(middleware.DefaultCORSConfig()))
+	// Body size limit: prevent memory exhaustion from oversized requests (10 MB default).
+	r.Use(middleware.BodySizeLimitMiddleware(middleware.DefaultMaxBodySize))
+	// Global rate limit: 30 req/s per IP, burst 60. Auth endpoints get tighter limits below.
+	globalRL := middleware.NewRateLimiter(30, 60)
+	r.Use(middleware.RateLimitMiddleware(globalRL))
 
 	// if otel is enabled, setup prometheus metrics endpoint
 	if s.otelProviders != nil && s.otelProviders.IsEnabled() {
@@ -206,7 +218,23 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	r.GET(
 		"/health",
 		func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			// Check database connectivity.
+			dbStatus := "ok"
+			if s.configService != nil {
+				if err := s.configService.PingDB(); err != nil {
+					dbStatus = "unavailable"
+				}
+			}
+			status := "ok"
+			code := http.StatusOK
+			if dbStatus != "ok" {
+				status = "degraded"
+				code = http.StatusServiceUnavailable
+			}
+			c.JSON(code, gin.H{
+				"status": status,
+				"db":     dbStatus,
+			})
 		},
 	)
 
@@ -407,10 +435,13 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 	if s.dashboardService != nil {
 		// Public dashboard endpoints: reachable without a user token so the login
 		// page can verify credentials before the user is authenticated.
+		// Auth endpoints get a stricter rate limit (5 req/s per IP) to prevent brute-force attacks.
+		authRL := middleware.NewRateLimiter(5, 10)
 		dashboardPublicAPI := r.Group(
 			"/api/dashboard",
 			s.requireInitialized(),
 			requireDashboardMode,
+			middleware.RateLimitMiddleware(authRL),
 		)
 		{
 			dashboardPublicAPI.POST("/auth/verify", s.dashboardVerifyTokenHandler())

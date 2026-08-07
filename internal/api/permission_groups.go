@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -13,7 +13,7 @@ func (s *Server) listPermissionGroupsHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		groups, err := s.permissionService.ListGroups()
 		if err != nil {
-			log.Printf("[api] listPermissionGroups: %v", err)
+			slog.Error("listPermissionGroups failed", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}

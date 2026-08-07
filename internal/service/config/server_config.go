@@ -18,6 +18,15 @@ func NewServerConfigService(db *gorm.DB) *ServerConfigService {
 	return &ServerConfigService{db: db}
 }
 
+// PingDB verifies the database connection is alive.
+func (s *ServerConfigService) PingDB() error {
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Ping()
+}
+
 // GetConfig retrieves the server configuration from the database.
 // If no configuration exists, it returns a default uninitialized config.
 func (s *ServerConfigService) GetConfig() (model.ServerConfig, error) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -79,12 +80,38 @@ func (s *Server) deleteUserHandler() gin.HandlerFunc {
 func (s *Server) disableUserHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("username")
+		// Fetch user first so we have the ID for session/token revocation.
+		targetUser, err := s.userService.GetUserByUsername(username)
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
 		if err := s.userService.DisableUser(username); err != nil {
 			handleServiceError(c, err)
 			return
 		}
-		// TODO: when session/token services are wired, revoke all sessions + device tokens here
-		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "disabled"})
+
+		// Revoke all sessions and device tokens for the disabled user to
+		// force re-authentication if the account is ever re-enabled.
+		if s.userSessionService != nil {
+			if err := s.userSessionService.RevokeAllForUser(targetUser.ID); err != nil {
+				slog.Error("disableUser: failed to revoke sessions", "username", username, "error", err)
+			}
+		}
+		if s.deviceTokenService != nil {
+			if err := s.deviceTokenService.RevokeAllForUser(targetUser.ID); err != nil {
+				slog.Error("disableUser: failed to revoke device tokens", "username", username, "error", err)
+			}
+		}
+
+		s.recordAuditEvent(c, "user.disabled", "user", username,
+			fmt.Sprintf("disabled user %s", username))
+
+		c.JSON(http.StatusOK, gin.H{
+			"ok":       true,
+			"username": targetUser.Username,
+			"status":   model.UserStatusDisabled,
+		})
 	}
 }
 

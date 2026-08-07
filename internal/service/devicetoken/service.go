@@ -145,6 +145,18 @@ func (s *Service) Revoke(tokenID uint) error {
 		}).Error
 }
 
+// RevokeAllForUser revokes every active device token for userID (idempotent).
+// Used when disabling a user account to invalidate all device credentials.
+func (s *Service) RevokeAllForUser(userID uint) error {
+	now := time.Now().UTC()
+	return s.db.Model(&model.DeviceToken{}).
+		Where("user_id = ? AND status = ?", userID, model.DeviceTokenStatusActive).
+		Updates(map[string]interface{}{
+			"status":     model.DeviceTokenStatusRevoked,
+			"revoked_at": now,
+		}).Error
+}
+
 // List returns device tokens visible to the caller: all tokens for admins,
 // own tokens only for regular users.
 func (s *Service) List(userID uint, role types.UserRole) ([]model.DeviceToken, error) {

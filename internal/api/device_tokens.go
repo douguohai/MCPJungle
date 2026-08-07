@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -21,7 +21,7 @@ func (s *Server) listDeviceTokensHandler() gin.HandlerFunc {
 		}
 		tokens, err := s.deviceTokenService.List(u.ID, u.Role)
 		if err != nil {
-			log.Printf("[api] listDeviceTokens: %v", err)
+			slog.Error("listDeviceTokens failed", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
@@ -109,6 +109,21 @@ func (s *Server) revokeDeviceTokenHandler() gin.HandlerFunc {
 		tid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token id"})
+			return
+		}
+		// Permission check: only the token owner or an admin can revoke a token.
+		u := currentUser(c)
+		if u == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+			return
+		}
+		tok, err := s.deviceTokenService.GetByID(uint(tid))
+		if err != nil {
+			handleServiceError(c, err)
+			return
+		}
+		if u.Role != types.UserRoleSystemAdmin && tok.UserID != u.ID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only the token owner or an admin can revoke this token"})
 			return
 		}
 		if err := s.deviceTokenService.Revoke(uint(tid)); err != nil {

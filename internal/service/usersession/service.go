@@ -93,6 +93,15 @@ func (s *Service) Revoke(rawID string) error {
 		Update("revoked_at", now).Error
 }
 
+// RevokeAllForUser marks every non-expired session for userID as expired
+// (idempotent).  Used when disabling a user account to force re-authentication.
+func (s *Service) RevokeAllForUser(userID uint) error {
+	now := time.Now().UTC()
+	return s.db.Model(&model.UserSession{}).
+		Where("user_id = ? AND (expires_at IS NULL OR expires_at > ?)", userID, now).
+		Update("expires_at", now).Error
+}
+
 func generateID() (string, error) {
 	b := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(b); err != nil {

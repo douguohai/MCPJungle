@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -56,9 +56,9 @@ func (s *Server) registerServerHandler() gin.HandlerFunc {
 		if force {
 			// If "force" option is set, we check if a server with the same name already exists. If it does, we deregister it before registering the new one.
 			if _, err := s.mcpService.GetMcpServer(input.Name); err == nil {
-				log.Printf("[INFO] force=true: deregistering existing MCP server %s before re-registration", input.Name)
+				slog.Info("force=true: deregistering existing MCP server before re-registration", "server", input.Name)
 				if err := s.mcpService.DeregisterMcpServer(input.Name); err != nil {
-					log.Printf("[api] registerServer force deregister: %v", err)
+					slog.Error("registerServer force deregister failed", "error", err)
 					c.JSON(
 						http.StatusInternalServerError,
 						gin.H{"error": "internal server error"},
@@ -66,7 +66,7 @@ func (s *Server) registerServerHandler() gin.HandlerFunc {
 					return
 				}
 			} else if !errors.Is(err, apierrors.ErrNotFound) {
-				log.Printf("[api] registerServer check existing: %v", err)
+				slog.Error("registerServer check existing failed", "error", err)
 				c.JSON(
 					http.StatusInternalServerError,
 					gin.H{"error": "internal server error"},
@@ -212,7 +212,7 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 			case types.TransportStreamableHTTP:
 				conf, err := record.GetStreamableHTTPConfig()
 				if err != nil {
-					log.Printf("[api] listServers streamableHTTP config for %s: %v", record.Name, err)
+					slog.Error("listServers streamableHTTP config failed", "server", record.Name, "error", err)
 					c.JSON(
 						http.StatusInternalServerError,
 						gin.H{"error": "internal server error"},
@@ -223,7 +223,7 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 			case types.TransportStdio:
 				conf, err := record.GetStdioConfig()
 				if err != nil {
-					log.Printf("[api] listServers stdio config for %s: %v", record.Name, err)
+					slog.Error("listServers stdio config failed", "server", record.Name, "error", err)
 					c.JSON(
 						http.StatusInternalServerError,
 						gin.H{"error": "internal server error"},
@@ -237,7 +237,7 @@ func (s *Server) listServersHandler() gin.HandlerFunc {
 				// transport is SSE
 				conf, err := record.GetSSEConfig()
 				if err != nil {
-					log.Printf("[api] listServers SSE config for %s: %v", record.Name, err)
+					slog.Error("listServers SSE config failed", "server", record.Name, "error", err)
 					c.JSON(
 						http.StatusInternalServerError,
 						gin.H{"error": "internal server error"},
@@ -353,13 +353,13 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 			case types.TransportStreamableHTTP:
 				decConf, decErr := mcp.DecryptConfigBearerToken(record.Config)
 				if decErr != nil {
-					log.Printf("[api] getServerConfigs decrypt config for %s: %v", record.Name, decErr)
+					slog.Error("getServerConfigs decrypt config failed", "server", record.Name, "error", decErr)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 					return
 				}
 				sConf, sConfErr := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetStreamableHTTPConfig()
 				if sConfErr != nil {
-					log.Printf("[api] getServerConfigs streamableHTTP config for %s: %v", record.Name, sConfErr)
+					slog.Error("getServerConfigs streamableHTTP config failed", "server", record.Name, "error", sConfErr)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 					return
 				}
@@ -369,7 +369,7 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 			case types.TransportStdio:
 				conf, err := record.GetStdioConfig()
 				if err != nil {
-					log.Printf("[api] getServerConfigs stdio config for %s: %v", record.Name, err)
+					slog.Error("getServerConfigs stdio config failed", "server", record.Name, "error", err)
 					c.JSON(
 						http.StatusInternalServerError,
 						gin.H{"error": "internal server error"},
@@ -383,13 +383,13 @@ func (s *Server) getServerConfigsHandler() gin.HandlerFunc {
 				// transport is SSE
 				decConf, decErr := mcp.DecryptConfigBearerToken(record.Config)
 				if decErr != nil {
-					log.Printf("[api] getServerConfigs decrypt config for %s: %v", record.Name, decErr)
+					slog.Error("getServerConfigs decrypt config failed", "server", record.Name, "error", decErr)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 					return
 				}
 				sseConf, sseConfErr := (&model.McpServer{Transport: record.Transport, Config: decConf}).GetSSEConfig()
 				if sseConfErr != nil {
-					log.Printf("[api] getServerConfigs SSE config for %s: %v", record.Name, sseConfErr)
+					slog.Error("getServerConfigs SSE config failed", "server", record.Name, "error", sseConfErr)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 					return
 				}

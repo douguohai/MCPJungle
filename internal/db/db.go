@@ -3,9 +3,10 @@ package db
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -24,7 +25,7 @@ func NewDBConnection(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("no database DSN configured: set DATABASE_URL or the MYSQL_* environment variables (MySQL is the only supported database)")
 	}
 	mysqlDSN := mysqlDSNFromURL(dsn)
-	log.Printf("[db] Using mysql database (%s)", maskDSN(dsn))
+	slog.Info("Using mysql database", "dsn", maskDSN(dsn))
 
 	c := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
@@ -33,6 +34,17 @@ func NewDBConnection(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	// Configure connection pool for production use.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(25)                  // max concurrent connections
+	sqlDB.SetMaxIdleConns(10)                  // max idle connections
+	sqlDB.SetConnMaxLifetime(30 * time.Minute) // recycle connections every 30 min
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)  // close idle connections after 5 min
+
 	return db, nil
 }
 

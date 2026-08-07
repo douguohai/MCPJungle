@@ -2,7 +2,7 @@ package api
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -54,7 +54,7 @@ func handleServiceError(c *gin.Context, err error) {
 		return
 	}
 	// Catch-all: log detailed error, return generic message to client.
-	log.Printf("[api] unhandled error: %v", err)
+	slog.Error("unhandled API error", "error", err)
 	c.JSON(http.StatusInternalServerError, types.APIErrorResponse{Error: "internal server error"})
 }
 
@@ -80,6 +80,6 @@ func (s *Server) recordAuditEvent(c *gin.Context, actionType, targetType, target
 		ChangeSummary: changeSummary,
 	}
 	if err := s.auditEventService.RecordEvent(event); err != nil {
-		log.Printf("[audit] failed to record event %s: %v", actionType, err)
+		slog.Error("failed to record audit event", "action", actionType, "error", err)
 	}
 }
